@@ -81,7 +81,7 @@ class WorkerPool:
             if prefetch > 0:
                 options["prefetch"] = prefetch
 
-        return "simple", options
+        return options
 
 
 def compile_protofilter(match: List[FieldExpr]) -> str:
