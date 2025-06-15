@@ -2,6 +2,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 from scitq2.grpc_client import Scitq2Client
+from recruit import WorkerPool
 
 
 @dataclass
@@ -9,21 +10,10 @@ class Task:
     tag: str
     command: str
     container: str
-    outputs: Dict[str, str]  # Named output values
+    outputs: Dict[str, str]  # Named output globs
 
     def output(self, name: str) -> str:
         return self.outputs.get(name)
-
-
-@dataclass
-class Param:
-    name: str
-    type: type
-    default: Optional[object] = None
-    help: str = ""
-
-    def value(self):
-        return self.default
 
 
 class TaskSpec:
@@ -47,51 +37,12 @@ class TaskSpec:
         return (self.cpu, self.mem, self.prefetch) == (other.cpu, other.mem, other.prefetch)
 
 
-class WorkerPool:
-    def __init__(self, *, cpu=None, mem=None, max_recruited=None, **kwargs):
-        self.cpu = cpu
-        self.mem = mem
-        self.max_recruited = max_recruited
-        self.extra_options = kwargs  # flavor, image, etc.
-
-    def build_recruiter(self, task_spec: Optional[TaskSpec]) -> tuple[str, dict]:
-        options = dict(self.extra_options)
-
-        if task_spec is None:
-            options["concurrency"] = 1
-            options["prefetch"] = 0
-        else:
-            if not self.cpu and not self.mem:
-                raise ValueError("WorkerPool must define cpu or mem to use TaskSpec")
-
-            candidates = []
-            if self.cpu and task_spec.cpu:
-                candidates.append(self.cpu / task_spec.cpu)
-            if self.mem and task_spec.mem:
-                candidates.append(self.mem / task_spec.mem)
-
-            concurrency = int(max(1, min(candidates)))
-            prefetch = round(concurrency * task_spec.prefetch)
-
-            options["concurrency"] = concurrency
-            if prefetch > 0:
-                options["prefetch"] = prefetch
-
-        return "simple", options
-
-    def __eq__(self, other):
-        if not isinstance(other, WorkerPool):
-            return False
-        return (self.cpu, self.mem, self.max_recruited, self.extra_options) == (
-            other.cpu, other.mem, other.max_recruited, other.extra_options
-        )
-
-
 class Step:
     def __init__(self, name: str, worker_pool: Optional[WorkerPool] = None, task_spec: Optional[TaskSpec] = None):
         self.name = name
         self.tasks: List[Task] = []
-        self.worker_pool: Optional[WorkerPool] = worker_pool
+        self.outputs_globs: Dict[str, str] = {}  # e.g., {"fastqs": "*.fastq.gz"}
+        self.worker_pool: Optional["WorkerPool"] = worker_pool
         self.task_spec: Optional[TaskSpec] = task_spec
         self.step_id: Optional[int] = None
 
@@ -103,9 +54,27 @@ class Step:
         container: str,
         outputs: Optional[Dict[str, str]] = None,
     ):
+        if outputs:
+            for key, pattern in outputs.items():
+                if key in self.outputs_globs:
+                    if self.outputs_globs[key] != pattern:
+                        raise ValueError(f"Output '{key}' in step '{self.name}' is declared with conflicting glob patterns.")
+                else:
+                    print(f"[WARNING] Output '{key}' is newly introduced in task '{tag}' of step '{self.name}' — inconsistent output keys.")
+
+            for expected_key in self.outputs_globs:
+                if expected_key not in outputs:
+                    print(f"[WARNING] Task '{tag}' in step '{self.name}' is missing declared output '{expected_key}'.")
+
+            for key in outputs:
+                if key not in self.outputs_globs:
+                    self.outputs_globs[key] = outputs[key]
+
         self.tasks.append(Task(tag=tag, command=command, container=container, outputs=outputs or {}))
 
     def output(self, name: str, grouped: bool = False):
+        if name not in self.outputs_globs:
+            raise ValueError(f"Output '{name}' not declared in step '{self.name}'")
         if not self.tasks:
             raise ValueError(f"No tasks defined for step {self.name}")
         if grouped:
