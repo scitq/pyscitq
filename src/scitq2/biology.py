@@ -62,6 +62,21 @@ class FieldBuilder:
 
 # Static filter interface (S.<field_name>) — EBI field names only
 class S:
+    """
+    Static filter interface for ENA/SRA fields.
+    This class provides a set of fields that can be used to filter samples
+    based on their attributes such as run_accession, first_public, last_updated,
+    read_count, base_count, average_read_length, size_mb, experiment_accession,
+    library_name, library_strategy, library_selection, library_source, library_layout,
+    insert_size, instrument_platform, instrument_model, study_accession,
+    sample_accession, tax_id, scientific_name, sample_alias, and secondary_sample_accession.
+    Usage:
+    sample_filter = SampleFilter(
+        S.library_strategy == "WGS",
+        S.read_count >= 1000000,
+        S.first_public >= "2020-01-01"
+    )
+    """
     run_accession = FieldBuilder("run_accession")
     first_public = FieldBuilder("first_public")
     last_updated = FieldBuilder("last_updated")

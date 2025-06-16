@@ -1,4 +1,4 @@
-from scitq2 import Workflow, Param, WorkerPool, W, TaskSpec, Container, Resource, Shell, URI, cond, Outputs, run, ParamSpec
+from scitq2 import Workflow, Param, WorkerPool, W, TaskSpec, Resource, Shell, URI, cond, Outputs, run, ParamSpec
 from scitq2.biology import ENA, SRA, S, SampleFilter
 
 class Params(metaclass=ParamSpec):
