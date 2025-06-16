@@ -1,16 +1,39 @@
 from collections import defaultdict
-from dataclasses import dataclass
 from typing import Dict, List, Optional
 from scitq2.grpc_client import Scitq2Client
 from recruit import WorkerPool
 
+class Outputs:
+    def __init__(self, publish=None, **kwargs):
+        self.globs: Dict[str, str] = kwargs
+        self.publish = publish
 
-@dataclass
+        if publish:
+            if not isinstance(publish, dict):
+                raise ValueError("publish must be a dictionary")
+
+            required_keys = {"type", "path"}
+            if not required_keys.issubset(publish):
+                raise ValueError("publish must include 'type' and 'path'")
+
+            if not isinstance(publish["type"], list):
+                raise ValueError("'publish[\"type\"]' must be a list of output names")
+
+            for output_key in publish["type"]:
+                if output_key not in self.globs:
+                    raise ValueError(f"Cannot publish unknown output: '{output_key}'")
+
+            if "mode" in publish and publish["mode"] not in ("copy", "move"):
+                raise ValueError("publish['mode'] must be 'copy' or 'move'")
+
+
+
 class Task:
-    tag: str
-    command: str
-    container: str
-    outputs: Dict[str, str]  # Named output globs
+    def __init__(self, tag: str, command: str, container: str, outputs: Optional[Dict[str, str]] = None):
+        self.tag = tag
+        self.command = command
+        self.container = container
+        self.outputs = outputs or {}
 
     def output(self, name: str) -> str:
         return self.outputs.get(name)
@@ -32,19 +55,20 @@ class TaskSpec:
         return float(p)
 
     def __eq__(self, other):
-        if not isinstance(other, TaskSpec):
-            return False
-        return (self.cpu, self.mem, self.prefetch) == (other.cpu, other.mem, other.prefetch)
+        return isinstance(other, TaskSpec) and (
+            self.cpu, self.mem, self.prefetch
+        ) == (other.cpu, other.mem, other.prefetch)
 
 
 class Step:
     def __init__(self, name: str, worker_pool: Optional[WorkerPool] = None, task_spec: Optional[TaskSpec] = None):
         self.name = name
         self.tasks: List[Task] = []
-        self.outputs_globs: Dict[str, str] = {}  # e.g., {"fastqs": "*.fastq.gz"}
-        self.worker_pool: Optional["WorkerPool"] = worker_pool
-        self.task_spec: Optional[TaskSpec] = task_spec
+        self.worker_pool = worker_pool
+        self.task_spec = task_spec
         self.step_id: Optional[int] = None
+        self.outputs_globs: Dict[str, str] = {}
+        self.publish: Optional[dict] = None
 
     def add_task(
         self,
@@ -52,29 +76,25 @@ class Step:
         tag: str,
         command: str,
         container: str,
-        outputs: Optional[Dict[str, str]] = None,
+        outputs: Optional[Outputs] = None,
     ):
         if outputs:
-            for key, pattern in outputs.items():
-                if key in self.outputs_globs:
-                    if self.outputs_globs[key] != pattern:
-                        raise ValueError(f"Output '{key}' in step '{self.name}' is declared with conflicting glob patterns.")
-                else:
-                    print(f"[WARNING] Output '{key}' is newly introduced in task '{tag}' of step '{self.name}' — inconsistent output keys.")
+            # Consistency check
+            if self.outputs_globs and outputs.globs != self.outputs_globs:
+                raise ValueError(f"Inconsistent outputs declared in step '{self.name}'")
+            self.outputs_globs = outputs.globs
 
-            for expected_key in self.outputs_globs:
-                if expected_key not in outputs:
-                    print(f"[WARNING] Task '{tag}' in step '{self.name}' is missing declared output '{expected_key}'.")
+            if self.publish and outputs.publish != self.publish:
+                raise ValueError(f"Inconsistent publish directives in step '{self.name}'")
+            self.publish = outputs.publish
 
-            for key in outputs:
-                if key not in self.outputs_globs:
-                    self.outputs_globs[key] = outputs[key]
+            output_mapping = outputs.globs
+        else:
+            output_mapping = {}
 
-        self.tasks.append(Task(tag=tag, command=command, container=container, outputs=outputs or {}))
+        self.tasks.append(Task(tag=tag, command=command, container=container, outputs=output_mapping))
 
     def output(self, name: str, grouped: bool = False):
-        if name not in self.outputs_globs:
-            raise ValueError(f"Output '{name}' not declared in step '{self.name}'")
         if not self.tasks:
             raise ValueError(f"No tasks defined for step {self.name}")
         if grouped:
@@ -86,8 +106,8 @@ class Step:
 
         pool = self.worker_pool or default_worker_pool
         if pool:
-            strategy, options = pool.build_recruiter(self.task_spec)
-            client.create_recruiter(step_id=self.step_id, strategy=strategy, options=options)
+            options = pool.build_recruiter(self.task_spec)
+            client.create_recruiter(step_id=self.step_id, options=options)
 
         for task in self.tasks:
             client.submit_task(
@@ -112,7 +132,7 @@ class Workflow:
         tag: str,
         command: str,
         container: str,
-        outputs: Optional[Dict[str, str]] = None,
+        outputs: Optional[Outputs] = None,
         worker_pool: Optional[WorkerPool] = None,
         task_spec: Optional[TaskSpec] = None,
     ) -> Step:
