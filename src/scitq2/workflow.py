@@ -1,6 +1,7 @@
 from collections import defaultdict
 from typing import Dict, List, Optional, Union
 from scitq2.grpc_client import Scitq2Client
+from scitq2.language import Language, Raw
 from recruit import WorkerPool
 from scitq2.uri import Resource
 
@@ -30,12 +31,14 @@ class Outputs:
 
 
 class Task:
-    def __init__(self, tag: str, command: str, container: str, outputs: Optional[Dict[str, str]] = None, resources: Optional[List[Resource]] = None):
+    def __init__(self, tag: str, command: str, container: str, outputs: Optional[Dict[str, str]] = None, 
+                 resources: Optional[List[Resource]] = None, language: Optional[Language] = None):
         self.tag = tag
         self.command = command
         self.container = container
         self.outputs = outputs or {}
         self.resources = resources or []
+        self.language = language or Raw()
 
     def output(self, name: str) -> str:
         return self.outputs.get(name)
@@ -80,6 +83,7 @@ class Step:
         container: str,
         outputs: Optional[Outputs] = None,
         resources: Optional[Union[Resource, List[Resource]]] = None,
+        language: Optional[Language] = None,
     ):
         if outputs:
             # Consistency check
@@ -100,7 +104,7 @@ class Step:
         else:
             resources_list = resources or []
 
-        self.tasks.append(Task(tag=tag, command=command, container=container, outputs=output_mapping, resources=resources_list))
+        self.tasks.append(Task(tag=tag, command=command, container=container, outputs=output_mapping, resources=resources_list, language=language))
 
     def output(self, name: str, grouped: bool = False):
         if not self.tasks:
@@ -118,20 +122,22 @@ class Step:
             client.create_recruiter(step_id=self.step_id, options=options)
 
         for task in self.tasks:
+            full_command = task.language.compile_command(task.command)
             client.submit_task(
                 step_id=self.step_id,
-                command=task.command,
+                command=full_command,
                 container=task.container,
             )
 
 
 class Workflow:
-    def __init__(self, name: str, description: str = "", worker_pool: Optional[WorkerPool] = None):
+    def __init__(self, name: str, description: str = "", worker_pool: Optional[WorkerPool] = None, language: Optional[Language] = None):
         self.name = name
         self.description = description
         self._steps: Dict[str, Step] = {}
         self.worker_pool = worker_pool
         self.max_recruited = worker_pool.max_recruited if worker_pool else None
+        self.language = language or Raw()
 
     def Step(
         self,
@@ -142,6 +148,7 @@ class Workflow:
         container: str,
         outputs: Optional[Outputs] = None,
         resources: Optional[Union[Resource, List[Resource]]] = None,
+        language: Optional[Language] = None,
         worker_pool: Optional[WorkerPool] = None,
         task_spec: Optional[TaskSpec] = None
     ) -> Step:
@@ -158,7 +165,8 @@ class Workflow:
             self._steps[name] = new_step
             step = new_step
 
-        step.add_task(tag=tag, command=command, container=container, outputs=outputs, resources=resources)
+        effective_language = language or self.language
+        step.add_task(tag=tag, command=command, container=container, outputs=outputs, resources=resources, language=effective_language)
         return step
 
     def compile(self, client: Scitq2Client) -> int:

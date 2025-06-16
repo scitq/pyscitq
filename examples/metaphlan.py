@@ -17,8 +17,7 @@ def MetaPhlAnWorkflow(params: Params):
         name="metaphlan4_project_analysis",
         description="Workflow for running MetaPhlAn4 on WGS data from ENA or SRA.",
         version="1.0.0",
-        shell="bash",
-        shell_options=(Shell.PIPEFAIL, Shell.HELPERS, Shell.ERREXIT),
+        language=Shell("bash", options=(Shell.PIPEFAIL, Shell.HELPERS, Shell.ERREXIT)),
         worker_pool=WorkerPool(
             W.provider.like("azure%"),
             W.region.is_default(),
