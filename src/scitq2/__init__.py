@@ -4,7 +4,7 @@ from .workflow import Workflow, TaskSpec, Outputs
 from .param import Param, ParamSpec
 from .recruit import WorkerPool, W
 from .util import cond
-from .shell import Shell
+from .language import Shell, Raw
 from .uri import Resource, URI
 from .runner import run
 
@@ -14,6 +14,7 @@ __all__ = [
     "WorkerPool", "W",
     "TaskSpec",
     "Shell",
+    "Raw",
     "Resource",
     "Outputs",
     "cond",
