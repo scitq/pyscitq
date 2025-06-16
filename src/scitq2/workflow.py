@@ -1,7 +1,8 @@
 from collections import defaultdict
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 from scitq2.grpc_client import Scitq2Client
 from recruit import WorkerPool
+from scitq2.uri import Resource
 
 class Outputs:
     def __init__(self, publish=None, **kwargs):
@@ -29,11 +30,12 @@ class Outputs:
 
 
 class Task:
-    def __init__(self, tag: str, command: str, container: str, outputs: Optional[Dict[str, str]] = None):
+    def __init__(self, tag: str, command: str, container: str, outputs: Optional[Dict[str, str]] = None, resources: Optional[List[Resource]] = None):
         self.tag = tag
         self.command = command
         self.container = container
         self.outputs = outputs or {}
+        self.resources = resources or []
 
     def output(self, name: str) -> str:
         return self.outputs.get(name)
@@ -77,6 +79,7 @@ class Step:
         command: str,
         container: str,
         outputs: Optional[Outputs] = None,
+        resources: Optional[Union[Resource, List[Resource]]] = None,
     ):
         if outputs:
             # Consistency check
@@ -92,7 +95,12 @@ class Step:
         else:
             output_mapping = {}
 
-        self.tasks.append(Task(tag=tag, command=command, container=container, outputs=output_mapping))
+        if isinstance(resources, Resource):
+            resources_list = [resources]
+        else:
+            resources_list = resources or []
+
+        self.tasks.append(Task(tag=tag, command=command, container=container, outputs=output_mapping, resources=resources_list))
 
     def output(self, name: str, grouped: bool = False):
         if not self.tasks:
@@ -133,8 +141,9 @@ class Workflow:
         command: str,
         container: str,
         outputs: Optional[Outputs] = None,
+        resources: Optional[Union[Resource, List[Resource]]] = None,
         worker_pool: Optional[WorkerPool] = None,
-        task_spec: Optional[TaskSpec] = None,
+        task_spec: Optional[TaskSpec] = None
     ) -> Step:
         new_step = Step(name, worker_pool, task_spec)
         if name in self._steps:
@@ -149,7 +158,7 @@ class Workflow:
             self._steps[name] = new_step
             step = new_step
 
-        step.add_task(tag=tag, command=command, container=container, outputs=outputs)
+        step.add_task(tag=tag, command=command, container=container, outputs=outputs, resources=resources)
         return step
 
     def compile(self, client: Scitq2Client) -> int:
