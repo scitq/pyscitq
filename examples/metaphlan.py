@@ -1,8 +1,5 @@
-from scitq2 import Workflow, Step, Spec, Param, WorkerPool, W, TaskSpec, Container, Resource, Shell, URI, cond, Outputs, run, ParamSpec, S, SampleFilter
-from scitq2.enums import Source, LibraryLayout, CatalogVersion
-from scitq2.biology import ENA, SRA
-from dataclasses import dataclass
-from typing import Optional
+from scitq2 import Workflow, Param, WorkerPool, W, TaskSpec, Container, Resource, Shell, URI, cond, Outputs, run, ParamSpec
+from scitq2.biology import ENA, SRA, S, SampleFilter
 
 class Params(metaclass=ParamSpec):
     data_source = Param.enum(choices=["ENA", "SRA", "URI"], required=True)
