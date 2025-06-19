@@ -50,7 +50,7 @@ def MetaPhlAnWorkflow(params: Params):
             field_map={
                 "sample_accession": "folder.name",
                 "project_accession": "folder.basename",
-                "fastqs": "file.uri",
+                "fastqs": "file.uris",
             }
         )
 

@@ -71,6 +71,8 @@ class URI:
             group_key_fn = lambda path: path.parent.name
         elif event_name == 'file.name':
             group_key_fn = lambda path: path.name
+        elif event_name == 'file.uri':
+            group_key_fn = lambda path: str(path)
         elif event_name.startswith('file.pattern.'):
             if not pattern:
                 raise ValueError("group_by='pattern' requires a regex pattern")
@@ -101,22 +103,68 @@ class URI:
             first_path = PurePosixPath(parsed_first.path)
 
             for dest_field, expr in field_map.items():
-                if expr == "file.name":
-                    sample_fields[dest_field] = first_path.name
-                elif expr == "folder.name":
-                    sample_fields[dest_field] = first_path.parent.name
-                elif expr == "folder.basename":
-                    sample_fields[dest_field] = first_path.parent.parent.name
+                if expr.endswith("s") and not expr.endswith("ss"):
+                    is_plural = True
+                    expr = expr[:-1]
+                else:
+                    is_plural = False
+
+                if expr in {"file.name", "file.uri"}:
+                    if is_plural:
+                        values = []
+                        for f in file_list:
+                            parsed = urlparse(f)
+                            path = PurePosixPath(parsed.path)
+                            if expr == "file.name":
+                                values.append(path.name)
+                            elif expr == "file.uri":
+                                values.append(f)
+                        sample_fields[dest_field] = values
+                    else:
+                        parsed = urlparse(file_list[0])
+                        path = PurePosixPath(parsed.path)
+                        sample_fields[dest_field] = path.name if expr == "file.name" else file_list[0]
+
+                elif expr in {"folder.name", "folder.basename"}:
+                    if is_plural:
+                        values = []
+                        for f in file_list:
+                            parsed = urlparse(f)
+                            path = PurePosixPath(parsed.path)
+                            if expr == "folder.name":
+                                values.append(path.parent.name)
+                            else:
+                                values.append(path.parent.parent.name)
+                        sample_fields[dest_field] = values
+                    else:
+                        parsed = urlparse(file_list[0])
+                        path = PurePosixPath(parsed.path)
+                        if expr == "folder.name":
+                            sample_fields[dest_field] = path.parent.name
+                        else:
+                            sample_fields[dest_field] = path.parent.parent.name
+
                 elif expr.startswith("file.pattern."):
                     if group_by != "pattern":
                         raise ValueError(f"Cannot use '{expr}' outside pattern-based grouping")
                     name = expr.split(".", 2)[2]
-                    match = regex.match(first_path.name)
-                    if not match or name not in match.groupdict():
-                        raise ValueError(f"Group '{name}' not found in pattern match for {first_path.name}")
-                    sample_fields[dest_field] = match.group(name)
+                    if is_plural:
+                        values = []
+                        for f in file_list:
+                            match = regex.match(PurePosixPath(urlparse(f).path).name)
+                            if not match or name not in match.groupdict():
+                                continue
+                            values.append(match.group(name))
+                        sample_fields[dest_field] = values
+                    else:
+                        match = regex.match(first_path.name)
+                        if not match or name not in match.groupdict():
+                            raise ValueError(f"Group '{name}' not found in pattern match for {first_path.name}")
+                        sample_fields[dest_field] = match.group(name)
+
                 else:
                     raise ValueError(f"Unsupported field expression: {expr}")
+
 
             sample_fields["files"] = file_list
             result[key] = URIObject(sample_fields)
