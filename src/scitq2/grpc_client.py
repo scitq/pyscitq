@@ -4,6 +4,46 @@ import grpc
 import os
 from scitq2.pb import taskqueue_pb2, taskqueue_pb2_grpc
 
+DEFAULT_EMBEDDED_CERT = b"""-----BEGIN CERTIFICATE-----
+MIIFCTCCAvGgAwIBAgIUNZ5Q3aLDxUrUdyAz2+TYGxiuU4cwDQYJKoZIhvcNAQEL
+BQAwFDESMBAGA1UEAwwJbG9jYWxob3N0MB4XDTI1MDIwMTIwMzk0NVoXDTM1MDEz
+MDIwMzk0NVowFDESMBAGA1UEAwwJbG9jYWxob3N0MIICIjANBgkqhkiG9w0BAQEF
+AAOCAg8AMIICCgKCAgEAu/4dLapuDNJQbdgCpz029xck1eo9c+V/I22s1wny7NO3
+j3nE5DAogRKzft0dJxkXT5X4Hho882D2Uae54j4i3tSg+2og6QMwHOo09FyorkMN
+KUfkiiScJ8pmiNqQdYSlpY1tdv3CIyi97p5c5zt5qupWMT3iMihuTLGl4lBfweF5
+Hwuc6HRySRAUJUf7wQklE9660gTjZDWsKQbI88av0QzNamDnz+aaXbZuakuM+iw9
+WyASyMpXsIU0/p+mB0wEJonczVh372hncGOU2uuXe7okhujQ4eO85kiwbXYCRXBH
+lL9Fa38VXHy1/s8IJLCQS0daYnhwePY/OO5eMVOm5JkMZhHQ3HmF3uppExVHxCLm
+F8T+xlSh9kJ1kPbpqsfPzSgN0fGWahgtdA5II/2hy4jtjRxdQa7hE+fvigdzWyzT
+p+KfCqWvTbYoJlHF1vs7PcZ5S5EtvzZGHDvMxdusw2YmM5h3JBLYknZCDEggbj8E
+19CX6fLybnX0ZNx9kvpLMPuGjyg1qZSPHbmy7Y6DJpntE+HQXjFcNX3kzRzvJJ3g
+5oIhR5l0KOccQqc1QhmZ6bgsjnb+6QEoqE5YbtsIjxLPVn1cCixEyBYLpWJeiFxW
+pqNgUwdVx6sFfM1YPAS69x0Zybp0LahWspf/VWVnMZbipd1N5p00dFxEKf3+R3UC
+AwEAAaNTMFEwHQYDVR0OBBYEFKqv1gulfVc84m3jrr2spn9cB5hMMB8GA1UdIwQY
+MBaAFKqv1gulfVc84m3jrr2spn9cB5hMMA8GA1UdEwEB/wQFMAMBAf8wDQYJKoZI
+hvcNAQELBQADggIBAFrTslO56fBIor/hY3torsAcUxSECDAzWhOP3g5RptTQDtA8
+23Q9DVdXWuqkzAuEYw9MvpMlx3s/YBzD/ZRruf8gZdO6BT3aSu4eI1TRuq//nyVq
+hA6ejOj3LOBdDTq8iPUyh4FLXAcGPllmmZgdp7fJ26atnOr1o9A3mGh/nTITejk2
+VBvXdEEYDVyh7sBVFTO1VETgXvrO9ereyd/oGosfmDSd45F4lOmpK1FRYeo3U1We
+YTEZLNJEPKUydIXf+NzCWF+ehFG8ovqk8tGKbD4tzgj5reuKlmknGk2On9rpL6qM
+QvVJwxdXoBg2QaZ/l6XGlIxYKrQEOL8DTsKVb5XBvTXq3DBoh0U/j1dn5SEyNkEA
+HCX7fSW+SNxHy3Cofxez62UgfmnnTW/qQtZAewkXizKlZoMKL997Lhu6dLQKQBx7
+Gklbv0GuEOahGUIFrZHrU1e21q4ehyDCxakpMSNOVPTP0CkiA+2W0+q2yicYPcVJ
+zDt+HSOZ0Agie8LJhQ4/vOfEK/O5NzUa15QuT5Haqzdv+Zsx146CPbwdSe6/Q5gv
+KwaOqDFyO5he1Irqb1XOMXOF7FJZIct+VvL2ECO8zPfPcTHcaR67/bNLOxJRd8LO
+qJ0sx+5dzhtylCwlS5XDjvYig4HAJ599kMZzvBu17LCJCZeo4n7ZGRbKi+Lx
+-----END CERTIFICATE-----"""
+
+def load_tls_certificate() -> bytes:
+    cert_path = os.environ.get("SCITQ_SSL_CERTIFICATE")
+    if cert_path:
+        try:
+            with open(cert_path, "rb") as f:
+                return f.read()
+        except Exception as e:
+            raise RuntimeError(f"Failed to load certificate from {cert_path}: {e}")
+    else:
+        return DEFAULT_EMBEDDED_CERT
 
 class BearerAuth(grpc.AuthMetadataPlugin):
     """Adds a Bearer token to the gRPC metadata for authorization."""
@@ -12,7 +52,6 @@ class BearerAuth(grpc.AuthMetadataPlugin):
 
     def __call__(self, context, callback):
         callback((("authorization", f"Bearer {self.token}"),), None)
-
 
 class Scitq2Client:
     """
@@ -36,7 +75,8 @@ class Scitq2Client:
         if not token:
             raise RuntimeError("Missing SCITQ_TOKEN environment variable")
 
-        credentials = grpc.ssl_channel_credentials()
+        trusted_certs = load_tls_certificate()
+        credentials = grpc.ssl_channel_credentials(root_certificates=trusted_certs)
         call_credentials = grpc.metadata_call_credentials(BearerAuth(token))
         composite_credentials = grpc.composite_channel_credentials(credentials, call_credentials)
 
@@ -108,3 +148,15 @@ class Scitq2Client:
         )
         response = self.stub.CreateRecruiter(request)
         return response.recruiter_id
+    
+    def FetchList(self, uri) -> list[str]:
+        """
+        Fetches a list of files from a given URI.
+        Parameters:
+        - uri (str): The URI to fetch files from.
+        Returns:
+        - list[str]: List of file paths.
+        """
+        request = taskqueue_pb2.FetchListRequest(uri=uri)
+        response = self.stub.FetchList(request)
+        return response.files

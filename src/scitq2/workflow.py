@@ -2,7 +2,7 @@ from collections import defaultdict
 from typing import Dict, List, Optional, Union
 from scitq2.grpc_client import Scitq2Client
 from scitq2.language import Language, Raw
-from recruit import WorkerPool
+from scitq2.recruit import WorkerPool
 from scitq2.uri import Resource
 
 class Outputs:

@@ -195,6 +195,11 @@ class TaskQueueStub(object):
                 request_serializer=taskqueue__pb2.GetWorkerStatsRequest.SerializeToString,
                 response_deserializer=taskqueue__pb2.GetWorkerStatsResponse.FromString,
                 _registered_method=True)
+        self.FetchList = channel.unary_unary(
+                '/taskqueue.TaskQueue/FetchList',
+                request_serializer=taskqueue__pb2.FetchListRequest.SerializeToString,
+                response_deserializer=taskqueue__pb2.FetchListResponse.FromString,
+                _registered_method=True)
 
 
 class TaskQueueServicer(object):
@@ -392,6 +397,12 @@ class TaskQueueServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def FetchList(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_TaskQueueServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -554,6 +565,11 @@ def add_TaskQueueServicer_to_server(servicer, server):
                     servicer.GetWorkerStats,
                     request_deserializer=taskqueue__pb2.GetWorkerStatsRequest.FromString,
                     response_serializer=taskqueue__pb2.GetWorkerStatsResponse.SerializeToString,
+            ),
+            'FetchList': grpc.unary_unary_rpc_method_handler(
+                    servicer.FetchList,
+                    request_deserializer=taskqueue__pb2.FetchListRequest.FromString,
+                    response_serializer=taskqueue__pb2.FetchListResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -1420,6 +1436,33 @@ class TaskQueue(object):
             '/taskqueue.TaskQueue/GetWorkerStats',
             taskqueue__pb2.GetWorkerStatsRequest.SerializeToString,
             taskqueue__pb2.GetWorkerStatsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def FetchList(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/taskqueue.TaskQueue/FetchList',
+            taskqueue__pb2.FetchListRequest.SerializeToString,
+            taskqueue__pb2.FetchListResponse.FromString,
             options,
             channel_credentials,
             insecure,

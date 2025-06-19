@@ -46,9 +46,11 @@ def MetaPhlAnWorkflow(params: Params):
     elif params.data_source == "URI":
         samples = URI.find(params.identifier,
             group_by="folder",
+            filter="*.f*q.gz",
             field_map={
                 "sample_accession": "folder.name",
-                "project_accession": "folder.basename"
+                "project_accession": "folder.basename",
+                "fastqs": "file.uri",
             }
         )
 
