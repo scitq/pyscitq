@@ -5,9 +5,6 @@ import sys
 import ast
 from typing import Callable, Type, Optional, Dict, get_type_hints
 from scitq2.param import ParamSpec
-import tokenize
-import io
-import os
 import re
 
 class WorkflowDefinitionError(Exception):
@@ -72,9 +69,6 @@ def extract_workflow_metadata(source_code: str) -> Dict[str, str]:
             return result
 
     raise WorkflowDefinitionError("No Workflow(...) declaration found in the script.")
-
-import re
-import sys
 
 def check_triple_quoted_strings_for_issues(source_code: str, filename: str):
     """
