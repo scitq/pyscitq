@@ -88,6 +88,13 @@ def warn_if_non_raw_command_strings(source_code: str, filename: str = "<string>"
                     lineno = string_token.start[0]
                     if raw_str.startswith(('f"', "f'", 'f"""', "f'''")):
                         print(f"⚠️ Warning: line {lineno} in {filename} uses a non-raw f-string for `command=`. Use fr\"...\" instead.", file=sys.stderr)
+                    elif raw_str.startswith(('"', "'")):
+                        if "\\" in raw_str:
+                            print(f"⚠️ Warning: line {lineno} in {filename} uses triple-quoted string with backslashes. Use raw string (r\"\"\"...\") to avoid escape issues.", file=sys.stderr)
+                        elif "{" in raw_str or "}" in raw_str:
+                            print(f"⚠️ Warning: line {lineno} in {filename} uses a non-raw string with curly braces. Use fr\"...\" instead.", file=sys.stderr)
+                    elif raw_str.startswith(('r"', "r'", 'r"""', "r'''")) and ("{" in raw_str or "}" in raw_str):
+                        print(f"⚠️ Warning: line {lineno} in {filename} uses a raw string with curly braces. Use fr\"...\" instead.", file=sys.stderr)
                     elif raw_str.startswith(('"""', "'''")) and "\\" in raw_str:
                         print(f"⚠️ Warning: line {lineno} in {filename} uses triple-quoted string with backslashes. Use raw string (r\"\"\"...\") to avoid escape issues.", file=sys.stderr)
 
