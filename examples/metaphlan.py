@@ -61,7 +61,7 @@ def MetaPhlAnWorkflow(params: Params):
             tag=sample.sample_accession,
             command=cond(
                 (sample.library_layout == "PAIRED",
-                    f"""
+                    fr"""
                     _para zcat /input/*1.f*q.gz > /tmp/read1.fastq
                     _para zcat /input/*2.f*q.gz > /tmp/read2.fastq
                     _wait
@@ -75,7 +75,7 @@ def MetaPhlAnWorkflow(params: Params):
                         --out2 /output/{sample.sample_accession}.2.fastq.gz
                     """),
                 default= 
-                    f"""
+                    fr"""
                     zcat /input/*.f*q.gz | fastp \
                     --adapter_sequence AGATCGGAAGAGCACACGTCTGAACTCCAGTCA \
                     --cut_front --cut_tail --n_base_limit 0 --length_required 60 \
@@ -96,7 +96,7 @@ def MetaPhlAnWorkflow(params: Params):
             tag=sample.sample_accession,
             command=cond(
                 (sample.library_layout == "PAIRED",
-                    f"""
+                    fr"""
                     bowtie2 -p $CPU --mm -x /resource/chm13v2.0/chm13v2.0 \
                     -1 /input/{sample.sample_accession}.1.fastq.gz \
                     -2 /input/{sample.sample_accession}.2.fastq.gz --reorder \
@@ -112,7 +112,7 @@ def MetaPhlAnWorkflow(params: Params):
                     _wait
                     """),
                 default= 
-                    f"""
+                    fr"""
                     bowtie2 -p ${{CPU}} --mm -x /resource/chm13v2.0/chm13v2.0 \
                     -U /input/{sample.sample_accession}.fastq.gz --reorder \
                     2> /output/{sample.sample_accession}.bowtie2.log \
@@ -133,13 +133,13 @@ def MetaPhlAnWorkflow(params: Params):
                 inputs=humanfilter.output("fastqs"),
                 command=cond(
                     (sample.library_layout == "PAIRED",
-                        f"""
+                        fr"""
                         _para seqtk sample -s42 /input/{sample.sample_accession}.1.fastq.gz {params.depth} | pigz > /output/{sample.sample_accession}.1.fastq.gz
                         _para seqtk sample -s42 /input/{sample.sample_accession}.2.fastq.gz {params.depth} | pigz > /output/{sample.sample_accession}.2.fastq.gz
                         _wait
                         """),
                     default= 
-                        f"""
+                        fr"""
                         seqtk sample -s42 /input/{sample.sample_accession}.fastq.gz {params.depth} | pigz > /output/{sample.sample_accession}.fastq.gz
                         """
                 ),
@@ -153,7 +153,7 @@ def MetaPhlAnWorkflow(params: Params):
                 (params.depth is not None, seqtk.output("fastqs")),
                 default=humanfilter.output("fastqs")
             ),
-            command=f"""
+            command=fr"""
             pigz -dc /input/*.fastq.gz | metaphlan \
                 --input_type fastq --no_map --offline \
                 --bowtie2db /resource/metaphlan/bowtie2 \
@@ -178,7 +178,7 @@ def MetaPhlAnWorkflow(params: Params):
     compile_step = workflow.Step(
         name="compile",
         inputs=metaphlan.output("metaphlan",grouped=True),
-        command="""
+        command=fr"""
         cd /input
         merge_metaphlan_tables.py *profile.txt > /output/merged_abundance_table.tsv
         """,
@@ -199,7 +199,7 @@ def MetaPhlAnWorkflow(params: Params):
         name="compile_logs",
         inputs=[humanfilter.output("logs",grouped=True,move="humanfilter"), 
                 metaphlan.output("logs",grouped=True,move="metaphlan")],
-        command=f"""
+        command=fr"""
         cd /input
         catalog=human
         for bowtielog in humanfilter/*; do
