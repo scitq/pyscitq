@@ -8,6 +8,7 @@ from scitq2.param import ParamSpec
 import tokenize
 import io
 import os
+import re
 
 class WorkflowDefinitionError(Exception):
     pass
@@ -72,31 +73,40 @@ def extract_workflow_metadata(source_code: str) -> Dict[str, str]:
 
     raise WorkflowDefinitionError("No Workflow(...) declaration found in the script.")
 
-def warn_if_non_raw_command_strings(source_code: str, filename: str = "<string>"):
+import re
+import sys
+
+def check_triple_quoted_strings_for_issues(source_code: str, filename: str):
     """
-    Emits warnings if 'command=' values are f-strings or triple-quoted strings
-    that should be marked as raw (r or fr).
+    Emit warnings for triple-quoted strings used in workflow scripts
+    when backslashes or curly braces may cause issues without appropriate prefixing.
     """
-    tokens = list(tokenize.generate_tokens(io.StringIO(source_code).readline))
-    for i, tok in enumerate(tokens):
-        if tok.type == tokenize.NAME and tok.string == "command":
-            # Look ahead for "="
-            if i + 2 < len(tokens) and tokens[i + 1].string == "=":
-                string_token = tokens[i + 2]
-                if string_token.type == tokenize.STRING:
-                    raw_str = string_token.string
-                    lineno = string_token.start[0]
-                    if raw_str.startswith(('f"', "f'", 'f"""', "f'''")):
-                        print(f"⚠️ Warning: line {lineno} in {filename} uses a non-raw f-string for `command=`. Use fr\"...\" instead.", file=sys.stderr)
-                    elif raw_str.startswith(('"', "'")):
-                        if "\\" in raw_str:
-                            print(f"⚠️ Warning: line {lineno} in {filename} uses triple-quoted string with backslashes. Use raw string (r\"\"\"...\") to avoid escape issues.", file=sys.stderr)
-                        elif "{" in raw_str or "}" in raw_str:
-                            print(f"⚠️ Warning: line {lineno} in {filename} uses a non-raw string with curly braces. Use fr\"...\" instead.", file=sys.stderr)
-                    elif raw_str.startswith(('r"', "r'", 'r"""', "r'''")) and ("{" in raw_str or "}" in raw_str):
-                        print(f"⚠️ Warning: line {lineno} in {filename} uses a raw string with curly braces. Use fr\"...\" instead.", file=sys.stderr)
-                    elif raw_str.startswith(('"""', "'''")) and "\\" in raw_str:
-                        print(f"⚠️ Warning: line {lineno} in {filename} uses triple-quoted string with backslashes. Use raw string (r\"\"\"...\") to avoid escape issues.", file=sys.stderr)
+    triple_quoted_re = re.compile(r'''(?P<prefix>[frFR]{,2})("""|\''')(.*?)(\2)''', re.DOTALL)
+
+    for match in triple_quoted_re.finditer(source_code):
+        prefix = match.group("prefix").lower()
+        raw_str = match.group(0)
+        body = match.group(3)
+        lineno = source_code[:match.start()].count('\n') + 1
+
+        # Rule 1: f-string without raw prefix
+        if prefix == "f":
+            print(f"⚠️ Warning: line {lineno} in {filename} uses a non-raw f-string for `command=`. Use fr\"...\" instead.", file=sys.stderr)
+
+        # Rule 2: plain quoted string (no prefix)
+        elif prefix == "":
+            if "\\" in body:
+                print(f"⚠️ Warning: line {lineno} in {filename} uses triple-quoted string with backslashes. Use raw string (r\"\"\"...\") to avoid escape issues.", file=sys.stderr)
+            elif "{" in body or "}" in body:
+                print(f"⚠️ Warning: line {lineno} in {filename} uses a non-raw string with curly braces. Use fr\"...\" instead.", file=sys.stderr)
+
+        # Rule 3: raw string with curly braces
+        elif prefix == "r" and ("{" in body or "}" in body):
+            print(f"⚠️ Warning: line {lineno} in {filename} uses a raw string with curly braces. Use fr\"...\" instead.", file=sys.stderr)
+
+        # Rule 4: plain string with backslash
+        elif prefix == "" and ("\\" in body):
+            print(f"⚠️ Warning: line {lineno} in {filename} uses triple-quoted string with backslashes. Use raw string (r\"\"\"...\") to avoid escape issues.", file=sys.stderr)
 
 
 def run(func: Callable):
@@ -126,7 +136,8 @@ def run(func: Callable):
     if args.metadata:
         # Load the source code of the function to extract metadata
         source_file = inspect.getsourcefile(func)
-        source_code = inspect.getsource(func)
+        with open(source_file, "r", encoding="utf-8") as f:
+            source_code = f.read()
 
         metadata = extract_workflow_metadata(source_code)
         if metadata is None:
@@ -143,7 +154,7 @@ def run(func: Callable):
             sys.exit(1)
 
         # Emit warnings on possibly misquoted command strings
-        warn_if_non_raw_command_strings(source_code, filename=source_file)
+        check_triple_quoted_strings_for_issues(source_code, filename=source_file)
 
         print(json.dumps(metadata, indent=2))
         return
