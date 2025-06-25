@@ -129,15 +129,29 @@ class Step:
                 container=task.container,
             )
 
+def underscore_join(*args: str) -> str:
+    """
+    Joins multiple strings with underscores, ignoring empty strings.
+    """
+    return "_".join(filter(None, args))
+
+def dot_join(*args: str) -> str:
+    """
+    Joins multiple strings with dots, ignoring empty strings.
+    """
+    return ".".join(filter(None, args))
 
 class Workflow:
-    def __init__(self, name: str, description: str = "", worker_pool: Optional[WorkerPool] = None, language: Optional[Language] = None):
+    def __init__(self, name: str, description: str = "", worker_pool: Optional[WorkerPool] = None, language: Optional[Language] = None, tag: Optional[str] = None,
+                 naming_strategy: callable = dot_join):
         self.name = name
+        self.tag = tag
         self.description = description
         self._steps: Dict[str, Step] = {}
         self.worker_pool = worker_pool
         self.max_recruited = worker_pool.max_recruited if worker_pool else None
         self.language = language or Raw()
+        self.naming_strategy = naming_strategy
 
     def Step(
         self,
@@ -171,7 +185,7 @@ class Workflow:
 
     def compile(self, client: Scitq2Client) -> int:
         workflow_id = client.create_workflow(
-            name=self.name,
+            name=self.naming_strategy(self.name,self.tag),
             description=self.description,
             max_recruited=self.max_recruited,
         )

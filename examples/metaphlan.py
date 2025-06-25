@@ -2,7 +2,7 @@ from scitq2 import Workflow, Param, WorkerPool, W, TaskSpec, Resource, Shell, UR
 from scitq2.biology import ENA, SRA, S, SampleFilter
 
 class Params(metaclass=ParamSpec):
-    data_source = Param.enum(choices=["ENA", "SRA", "URI"], required=True)
+    data_source = Param.enum(choices=["ENA", "SRA", "URI"], required=True, help="Data source for the samples: ENA, SRA, or URI.")
     identifier = Param.string(required=True)
     depth = Param.string(default="10M")
     version = Param.enum(choices=["4.0", "4.1"], required=True)
@@ -14,9 +14,10 @@ class Params(metaclass=ParamSpec):
 def MetaPhlAnWorkflow(params: Params):
 
     workflow = Workflow(
-        name="metaphlan4_project_analysis",
+        name="metaphlan4",
         description="Workflow for running MetaPhlAn4 on WGS data from ENA or SRA.",
         version="1.0.0",
+        tag=f"{params.identifier}-{params.depth}",
         language=Shell("bash", options=(Shell.PIPEFAIL, Shell.HELPERS, Shell.ERREXIT)),
         worker_pool=WorkerPool(
             W.provider.like("azure%"),
