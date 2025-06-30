@@ -1,4 +1,3 @@
-from collections import defaultdict
 from typing import Dict, List, Optional, Union
 from scitq2.grpc_client import Scitq2Client
 from scitq2.language import Language, Raw
@@ -9,6 +8,7 @@ import os
 import sys
 
 class Outputs:
+    """Represents the declarative outputs of a Step, which can be used in other Steps."""
     def __init__(self, publish=None, **kwargs):
         self.globs: Dict[str, str] = kwargs
         self.publish = publish
@@ -31,20 +31,134 @@ class Outputs:
             if "mode" in publish and publish["mode"] not in ("copy", "move"):
                 raise ValueError("publish['mode'] must be 'copy' or 'move'")
 
+class Output:
+    """Represents a single output of a task, which can be used in other tasks at runtime."""
+    def __init__(self, step: "Step", grouped: bool = False, globs: Optional[str]=None):
+        self.step = step
+        self.grouped = grouped
+        self.globs = globs
 
+    def __str__(self):
+        return self.resolve_path("<unset>", self.step.workflow)
+
+    def resolve_path(self, wf: "Workflow") -> Union[str, List[str]]:
+        def one(task: "Task") -> str:
+            return f"{wf.workspace_root}/{wf.full_name}/{task.full_name}/" + (self.globs or "")
+
+        if self.grouped:
+            return [one(task) for task in self.step.tasks]
+        if not self.step.tasks:
+            raise ValueError(f"Step {self.step.name} has no tasks to get output from")
+        return one(self.step.tasks[-1])
+
+    def resolve_task_id(self) -> List[int]:
+        """Resolve the task ID for this output, if available."""
+        if not self.step.tasks:
+            return []
+        if self.step.tasks[-1].task_id is None:
+            raise ValueError(f"Step {self.step.name} has no tasks compiled yet")
+        if self.grouped:
+            return [task.task_id for task in self.step.tasks]
+        return [self.step.tasks[-1].task_id]
+    
+class GroupedStep:
+    """A Step that groups multiple tasks together, allowing for collective task_id resolution."""
+    def __init__(self, step: "Step"):
+        self.step = step
+        
+    def task_ids(self) -> List[int]:
+        """Return a list of task IDs for all tasks in this grouped step."""
+        for task in self.step.tasks:
+            if task.task_id is None:
+                raise ValueError(f"Step {self.step.name} has some tasks uncompiled yet")
+        return [task.task_id for task in self.step.tasks]
 
 class Task:
-    def __init__(self, tag: str, command: str, container: str, outputs: Optional[Dict[str, str]] = None, 
-                 resources: Optional[List[Resource]] = None, language: Optional[Language] = None):
+    def __init__(self, tag: str, command: str, container: str, 
+                 step: "Step",
+                 inputs: Optional[Union[str, Output, List[str], List[Output]]] = None,
+                 outputs: Optional[Dict[str, str]] = None, 
+                 resources: Optional[List[Resource]] = None, 
+                 language: Optional[Language] = None,
+                 depends: Optional[List["Task"]] = None):
         self.tag = tag
         self.command = command
         self.container = container
+        self.step = step  # backref to the Step this task belongs to
+        self.full_name = self.step.naming_strategy(self.step.name, self.tag) if self.tag else self.step.name
         self.outputs = outputs or {}
+        self.depends = depends
+        if inputs is None:
+            self.inputs = []
+        elif isinstance(inputs, list):
+            self.inputs = inputs
+        elif isinstance(inputs, (str, Output)):
+            self.inputs = [inputs]
+        else:
+            raise ValueError(f"Invalid type for inputs: {type(inputs)}. Expected str, Output, or list of these.")
+
         self.resources = resources or []
         self.language = language or Raw()
+    
+    def compile(self, client: Scitq2Client):
+        self.full_command = self.language.compile_command(self.command)
 
-    def output(self, name: str) -> str:
-        return self.outputs.get(name)
+        # Resolve dependencies
+        resolved_depends = set()
+        if self.depends is None and self.inputs:
+            # Step 1: if no explicit dependencies, infer from inputs
+            for input_item in self.inputs:
+                if isinstance(input_item, Output):
+                    for task_id in input_item.resolve_task_id():
+                        resolved_depends.add(task_id)
+        elif self.depends is not None:
+            # Step 2: if explicit dependencies are given, resolve them
+            for dep in self.depends:
+                if isinstance(dep, Step):
+                    # If a Step is given, use its last task as the dependency
+                    if dep.tasks:
+                        task_id = dep.tasks[-1].task_id
+                        if task_id is None:
+                            raise ValueError(f"Step {dep.name} has no tasks compiled yet")
+                        resolved_depends.add(task_id)
+                    else:
+                        raise ValueError(f"Step {dep.name} has no tasks to depend on")
+                elif isinstance(dep, GroupedStep):
+                    for task_id in dep.task_ids():
+                        resolved_depends.add(task_id)
+        # check that there is no None in the dependencies
+        if None in resolved_depends:
+            raise ValueError("Task dependencies cannot contain None. Ensure all steps are compiled before compiling tasks.")
+
+        # Resolve inputs to Output objects
+        resolved_inputs = []
+        for input_item in self.inputs:
+            if isinstance(input_item, Output):
+                # If it's an Output, resolve its path
+                resolved_path = input_item.resolve_path(self.step.workflow)
+                if isinstance(resolved_path, list):
+                    resolved_inputs.extend(resolved_path)
+                else:
+                    resolved_inputs.append(resolved_path)
+            elif isinstance(input_item, str):
+                # If it's a string, treat it as a file path
+                resolved_inputs.append(input_item)
+            else:
+                raise ValueError(f"Invalid input type: {type(input_item)}. Expected str or Output.")
+        
+        resolved_output = Output(step=self.step, grouped=False).resolve_path(self.step.workflow)
+
+        self.task_id = client.submit_task(
+                step_id=self.step.step_id,
+                command=self.full_command,
+                container=self.container,
+                depends=resolved_depends,
+                inputs=resolved_inputs,
+                output=resolved_output,
+                resources=self.resources,
+                status=DEFAULT_TASK_STATUS,
+            )
+
 
 
 class TaskSpec:
@@ -68,8 +182,22 @@ class TaskSpec:
         ) == (other.cpu, other.mem, other.prefetch)
 
 
+def underscore_join(*args: str) -> str:
+    """
+    Joins multiple strings with underscores, ignoring empty strings.
+    """
+    return "_".join(filter(None, args))
+
+def dot_join(*args: str) -> str:
+    """
+    Joins multiple strings with dots, ignoring empty strings.
+    """
+    return ".".join(filter(None, args))
+
+
 class Step:
-    def __init__(self, name: str, workflow: "Workflow", worker_pool: Optional[WorkerPool] = None, task_spec: Optional[TaskSpec] = None):
+    def __init__(self, name: str, workflow: "Workflow", worker_pool: Optional[WorkerPool] = None, task_spec: Optional[TaskSpec] = None,
+                 naming_strategy: callable = dot_join, depends: Optional[Union["Step",List["Step"]]] = None):
         self.name = name
         self.tasks: List[Task] = []
         self.worker_pool = worker_pool
@@ -78,6 +206,13 @@ class Step:
         self.outputs_globs: Dict[str, str] = {}
         self.publish: Optional[dict] = None
         self.workflow = workflow
+        self.naming_strategy = naming_strategy
+        if depends is None:
+            self.depends = None
+        elif isinstance(depends, Step):
+            self.depends = [depends]
+        elif isinstance(depends, list) and all(isinstance(d, Step) for d in depends):
+            self.depends = depends
 
     def add_task(
         self,
@@ -86,11 +221,11 @@ class Step:
         command: str,
         container: str,
         outputs: Optional[Outputs] = None,
+        inputs: Optional[Union[str, Output, List[str], List[Output]]] = None,
         resources: Optional[Union[Resource, List[Resource]]] = None,
         language: Optional[Language] = None,
     ):
         if outputs:
-            # Consistency check
             if self.outputs_globs and outputs.globs != self.outputs_globs:
                 raise ValueError(f"Inconsistent outputs declared in step '{self.name}'")
             self.outputs_globs = outputs.globs
@@ -108,14 +243,14 @@ class Step:
         else:
             resources_list = resources or []
 
-        self.tasks.append(Task(tag=tag, command=command, container=container, outputs=output_mapping, resources=resources_list, language=language))
+        task = Task(tag=tag, step=self, command=command, container=container, outputs=output_mapping, 
+                    inputs=inputs, resources=resources_list, language=language, depends=self.depends)
+        self.tasks.append(task)
 
     def output(self, name: str, grouped: bool = False):
-        if not self.tasks:
-            raise ValueError(f"No tasks defined for step {self.name}")
-        if grouped:
-            return [task.output(name) for task in self.tasks]
-        return self.tasks[-1].output(name)
+        """Create an Output object for this step."""
+        output_glob = self.outputs_globs.get(name, "")
+        return Output(step=self, grouped=grouped, globs=output_glob)
 
     def compile(self, client: Scitq2Client):
         self.step_id = client.create_step(self.workflow.workflow_id, self.name)
@@ -128,29 +263,16 @@ class Step:
             client.create_recruiter(step_id=self.step_id, options=options)
 
         for task in self.tasks:
-            full_command = task.language.compile_command(task.command)
-            client.submit_task(
-                step_id=self.step_id,
-                command=full_command,
-                container=task.container,
-                status=DEFAULT_TASK_STATUS,
-            )
+            task.compile(client)
+    
+    def grouped(self) -> GroupedStep:
+        """Create a grouped step with a specific tag."""
+        return GroupedStep(step=self)
 
-def underscore_join(*args: str) -> str:
-    """
-    Joins multiple strings with underscores, ignoring empty strings.
-    """
-    return "_".join(filter(None, args))
-
-def dot_join(*args: str) -> str:
-    """
-    Joins multiple strings with dots, ignoring empty strings.
-    """
-    return ".".join(filter(None, args))
 
 class Workflow:
     def __init__(self, name: str, description: str = "", worker_pool: Optional[WorkerPool] = None, language: Optional[Language] = None, tag: Optional[str] = None,
-                 naming_strategy: callable = dot_join, provider: Optional[str] = None, region: Optional[str] = None):
+                 naming_strategy: callable = dot_join, task_naming_strategy: callable = dot_join, provider: Optional[str] = None, region: Optional[str] = None):
         self.name = name
         self.tag = tag
         self.description = description
@@ -159,9 +281,12 @@ class Workflow:
         self.max_recruited = worker_pool.max_recruited if worker_pool else None
         self.language = language or Raw()
         self.naming_strategy = naming_strategy
+        self.task_naming_strategy = task_naming_strategy
         self.provider = provider
         self.region = region
         self.workflow_id: Optional[int] = None
+        self.full_name: Optional[str] = None
+        self.workspace_root: Optional[str] = None
 
     def Step(
         self,
@@ -170,13 +295,17 @@ class Workflow:
         tag: str,
         command: str,
         container: str,
+        inputs: Optional[Union[str, Output, List[str], List[Output]]] = None,
         outputs: Optional[Outputs] = None,
         resources: Optional[Union[Resource, List[Resource]]] = None,
         language: Optional[Language] = None,
         worker_pool: Optional[WorkerPool] = None,
-        task_spec: Optional[TaskSpec] = None
+        task_spec: Optional[TaskSpec] = None,
+        naming_strategy: Optional[callable] = None,
     ) -> Step:
-        new_step = Step(name=name, workflow=self, worker_pool=worker_pool, task_spec=task_spec)
+        if naming_strategy is None:
+            naming_strategy = self.task_naming_strategy
+        new_step = Step(name=name, workflow=self, worker_pool=worker_pool, task_spec=task_spec, naming_strategy=naming_strategy)
         if name in self._steps:
             existing = self._steps[name]
             if (existing.worker_pool != new_step.worker_pool or existing.task_spec != new_step.task_spec):
@@ -190,19 +319,25 @@ class Workflow:
             step = new_step
 
         effective_language = language or self.language
-        step.add_task(tag=tag, command=command, container=container, outputs=outputs, resources=resources, language=effective_language)
+        step.add_task(tag=tag, command=command, container=container, outputs=outputs, inputs=inputs, resources=resources, language=effective_language)
         return step
 
     def compile(self, client: Scitq2Client) -> int:
+        self.workspace_root = client.get_workspace_root(
+            provider=self.provider,
+            region=self.region,
+        )
+        self.full_name = self.naming_strategy(self.name, self.tag) if self.tag else self.name
+
         self.workflow_id = client.create_workflow(
-            name=self.naming_strategy(self.name,self.tag),
+            name=self.full_name,
             description=self.description,
             max_recruited=self.max_recruited,
         )
         template_run_id = os.environ.get("SCITQ_TEMPLATE_RUN_ID")
         if template_run_id:
             try:
-                client.update_template_run(template_run_id=int(template_run_id), workflow_id=workflow_id)
+                client.update_template_run(template_run_id=int(template_run_id), workflow_id=self.workflow_id)
             except Exception as e:
                 print(f"⚠️ Warning: failed to update template run: {e}", file=sys.stderr)
         for step in self._steps.values():

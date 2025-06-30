@@ -3,7 +3,7 @@
 import grpc
 import os
 from scitq2.pb import taskqueue_pb2, taskqueue_pb2_grpc
-from typing import Optional
+from typing import Optional, List
 
 DEFAULT_EMBEDDED_CERT = b"""-----BEGIN CERTIFICATE-----
 MIIFCTCCAvGgAwIBAgIUNZ5Q3aLDxUrUdyAz2+TYGxiuU4cwDQYJKoZIhvcNAQEL
@@ -110,19 +110,64 @@ class Scitq2Client:
         response = self.stub.CreateStep(request)
         return response.step_id
 
-    def submit_task(self, step_id: int, command: str, container: str) -> int:
+    def submit_task(
+        self,
+        *,
+        step_id: int,
+        command: str,
+        container: str,
+        shell: Optional[str] = None,
+        container_options: Optional[str] = None,
+        inputs: Optional[List[str]] = None,
+        resources: Optional[List[str]] = None,
+        output: Optional[str] = None,
+        retry: Optional[int] = None,
+        is_final: Optional[bool] = None,
+        uses_cache: Optional[bool] = None,
+        download_timeout: Optional[float] = None,
+        running_timeout: Optional[float] = None,
+        upload_timeout: Optional[float] = None,
+        status: str = "P",
+        depends: Optional[List[int]] = None,
+    ) -> int:
         """
         Submits a task to a specific step.
 
-        Parameters:
-        - step_id (int): ID of the step the task belongs to
-        - command (str): Shell command to run
-        - container (str): Docker/Singularity container to use
+        Parameters match those in the proto definition.
 
         Returns:
         - int: The task ID
         """
-        request = taskqueue_pb2.TaskRequest(step_id=step_id, command=command, container=container)
+        request = taskqueue_pb2.TaskRequest(
+            step_id=step_id,
+            command=command,
+            container=container,
+            status=status,
+        )
+        if shell is not None:
+            request.shell = shell
+        if container_options is not None:
+            request.container_options = container_options
+        if inputs is not None:
+            request.input.extend(inputs)
+        if resources is not None:
+            request.resource.extend(resources)
+        if output is not None:
+            request.output = output
+        if retry is not None:
+            request.retry = retry
+        if is_final is not None:
+            request.is_final = is_final
+        if uses_cache is not None:
+            request.uses_cache = uses_cache
+        if download_timeout is not None:
+            request.download_timeout = download_timeout
+        if running_timeout is not None:
+            request.running_timeout = running_timeout
+        if upload_timeout is not None:
+            request.upload_timeout = upload_timeout
+        if depends is not None:
+            request.dependency.extend(depends)
         response = self.stub.SubmitTask(request)
         return response.task_id
 
