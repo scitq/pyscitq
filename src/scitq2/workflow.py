@@ -117,10 +117,10 @@ class Step:
             return [task.output(name) for task in self.tasks]
         return self.tasks[-1].output(name)
 
-    def compile(self, client: Scitq2Client, workflow_id: int, default_worker_pool: Optional[WorkerPool] = None):
-        self.step_id = client.create_step(workflow_id, self.name)
+    def compile(self, client: Scitq2Client):
+        self.step_id = client.create_step(self.workflow.workflow_id, self.name)
 
-        pool = self.worker_pool or default_worker_pool
+        pool = self.worker_pool or self.workflow.worker_pool
         if pool:
             options = pool.build_recruiter(self.task_spec,
                                            default_provider=self.workflow.provider,
@@ -161,6 +161,7 @@ class Workflow:
         self.naming_strategy = naming_strategy
         self.provider = provider
         self.region = region
+        self.workflow_id: Optional[int] = None
 
     def Step(
         self,
@@ -193,7 +194,7 @@ class Workflow:
         return step
 
     def compile(self, client: Scitq2Client) -> int:
-        workflow_id = client.create_workflow(
+        self.workflow_id = client.create_workflow(
             name=self.naming_strategy(self.name,self.tag),
             description=self.description,
             max_recruited=self.max_recruited,
@@ -205,5 +206,5 @@ class Workflow:
             except Exception as e:
                 print(f"⚠️ Warning: failed to update template run: {e}", file=sys.stderr)
         for step in self._steps.values():
-            step.compile(client, workflow_id, default_worker_pool=self.worker_pool)
-        return workflow_id
+            step.compile(client)
+        return self.workflow_id
