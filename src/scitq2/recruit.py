@@ -107,12 +107,23 @@ class WorkerPool:
         self.max_recruited = max_recruited
         self.extra_options = extra_options
 
-    def compile_filter(self) -> str:
-        return compile_protofilter(self.match)
+    def compile_filter(self, default_provider: Optional[str] = None, default_region: Optional[str] = None) -> str:
+        """ Compiles the worker pool's match expressions into a protofilter string."""
+        constraints = list(self.match)  # copy to avoid mutation
 
-    def build_recruiter(self, task_spec) -> tuple[str, dict]:
+        existing_fields = {expr.field for expr in constraints}
+
+        if default_provider and "provider" not in existing_fields:
+            constraints.append(FieldExpr("provider", "==", default_provider))
+
+        if default_region and "region" not in existing_fields:
+            constraints.append(FieldExpr("region", "==", default_region))
+
+        return compile_protofilter(constraints)
+
+    def build_recruiter(self, task_spec, default_provider: Optional[str] = None, default_region: Optional[str] = None) -> tuple[str, dict]:
         options = dict(self.extra_options)
-        options["filter"] = self.compile_filter()
+        options["filter"] = self.compile_filter(default_provider=default_provider, default_region=default_region)
 
         if task_spec is None:
             options["concurrency"] = 1

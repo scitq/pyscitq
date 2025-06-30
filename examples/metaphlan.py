@@ -9,6 +9,7 @@ class Params(metaclass=ParamSpec):
     custom_catalog = Param.string(required=False)
     download_locally = Param.boolean(default=False)
     limit = Param.integer(required=False)
+    location = Param.provider_region(required=True, help="Provider and region for the workflow execution.")
 
 
 def MetaPhlAnWorkflow(params: Params):
@@ -20,14 +21,14 @@ def MetaPhlAnWorkflow(params: Params):
         tag=f"{params.identifier}-{params.depth}",
         language=Shell("bash", options=(Shell.PIPEFAIL, Shell.HELPERS, Shell.ERREXIT)),
         worker_pool=WorkerPool(
-            W.provider.like("azure%"),
-            W.region.is_default(),
             W.cpu == 32,
             W.mem >= 120,
             W.disk >= 400,
             max_recruited=10,
             task_batches=2
         ),
+        provider=params.location.provider,
+        region=params.location.region,
     )
 
     if params.data_source == "ENA":

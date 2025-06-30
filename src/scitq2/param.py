@@ -1,5 +1,35 @@
 from typing import Any, Optional, List
+from dataclasses import dataclass
 
+@dataclass(frozen=True)
+class ProviderRegion:
+    """Represents a cloud provider and region combination."""
+    provider: str
+    region: str
+
+    __type_name__ = "provider_region" 
+
+    @staticmethod
+    def parse(value: str) -> "ProviderRegion":
+        if ":" not in value:
+            raise ValueError(f"Invalid ProviderRegion string: {value}")
+        provider, region = value.split(":", 1)
+        return ProviderRegion(provider=provider, region=region)
+
+    def __str__(self):
+        return f"{self.provider}:{self.region}"
+
+    def __repr__(self):
+        return f"ProviderRegion({self.provider!r}, {self.region!r})"
+
+
+def type_name(typ: type) -> str:
+    """Return a human-readable name for the type."""
+    return getattr(typ, "__type_name__", typ.__name__)
+
+def parser(typ: type, value: Any) -> Any:
+    """Parse a value to the specified type, handling custom types."""
+    return getattr(typ,"parse",typ)(value)
 
 class Param:
     def __init__(
@@ -43,7 +73,12 @@ class Param:
 
     @staticmethod
     def enum(choices: List[Any], **kwargs):
-        return Param(typ=str, choices=choices, **kwargs)
+        inferred_type = type(choices[0]) if choices else str
+        return Param(typ=inferred_type, choices=choices, **kwargs)
+    
+    @staticmethod
+    def provider_region(**kwargs):
+        return Param(typ=ProviderRegion, **kwargs)
 
 
 class ParamSpec(type):
@@ -62,9 +97,11 @@ class ParamSpec(type):
             if name in values:
                 raw = values[name]
                 try:
-                    casted = param.typ(raw)
+                    casted = parser(param.typ, raw)
                 except Exception as e:
-                    raise ValueError(f"Invalid type for parameter '{name}': {raw}") from e
+                    raise ValueError(
+                                f"Invalid value for parameter '{name}': {raw!r} (expected {type_name(param.typ)})"
+                            ) from e
 
                 if param.choices and casted not in param.choices:
                     raise ValueError(f"Invalid value for parameter '{name}': {casted} not in {param.choices}")
@@ -83,10 +120,10 @@ class ParamSpec(type):
         return [
             {
                 "name": name,
-                "type": param.typ.__name__,
+                "type": type_name(param.typ),
                 "required": param.required,
-                "default": param.default,
-                "choices": param.choices,
+                "default": str(param.default) if param.default is not None else None,
+                "choices": [str(c) for c in param.choices] if param.choices else None,
                 "help": param.help,
             }
             for name, param in cls._declared_params.items()

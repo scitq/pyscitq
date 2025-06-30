@@ -56,7 +56,7 @@ class URI:
         """
         uri = f"{uri_base.rstrip('/')}/{filter}" if filter else uri_base
         client = Scitq2Client()
-        files = client.FetchList(uri)
+        files = client.fetch_list(uri)
         groups = {}
 
         if event_name is None:

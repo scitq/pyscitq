@@ -6,6 +6,7 @@ src/pyscitq2.egg-info/dependency_links.txt
 src/pyscitq2.egg-info/top_level.txt
 src/scitq2/__init__.py
 src/scitq2/biology.py
+src/scitq2/constants.py
 src/scitq2/grpc_client.py
 src/scitq2/language.py
 src/scitq2/param.py

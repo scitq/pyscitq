@@ -3,6 +3,7 @@
 import grpc
 import os
 from scitq2.pb import taskqueue_pb2, taskqueue_pb2_grpc
+from typing import Optional
 
 DEFAULT_EMBEDDED_CERT = b"""-----BEGIN CERTIFICATE-----
 MIIFCTCCAvGgAwIBAgIUNZ5Q3aLDxUrUdyAz2+TYGxiuU4cwDQYJKoZIhvcNAQEL
@@ -35,13 +36,9 @@ qJ0sx+5dzhtylCwlS5XDjvYig4HAJ599kMZzvBu17LCJCZeo4n7ZGRbKi+Lx
 -----END CERTIFICATE-----"""
 
 def load_tls_certificate() -> bytes:
-    cert_path = os.environ.get("SCITQ_SSL_CERTIFICATE")
-    if cert_path:
-        try:
-            with open(cert_path, "rb") as f:
-                return f.read()
-        except Exception as e:
-            raise RuntimeError(f"Failed to load certificate from {cert_path}: {e}")
+    cert_string = os.environ.get("SCITQ_SSL_CERTIFICATE")
+    if cert_string and "-----BEGIN CERTIFICATE-----" in cert_string:
+        return cert_string.encode('utf-8')
     else:
         return DEFAULT_EMBEDDED_CERT
 
@@ -149,7 +146,7 @@ class Scitq2Client:
         response = self.stub.CreateRecruiter(request)
         return response.recruiter_id
     
-    def FetchList(self, uri) -> list[str]:
+    def fetch_list(self, uri) -> list[str]:
         """
         Fetches a list of files from a given URI.
         Parameters:
@@ -160,3 +157,38 @@ class Scitq2Client:
         request = taskqueue_pb2.FetchListRequest(uri=uri)
         response = self.stub.FetchList(request)
         return response.files
+
+    def update_template_run(self, template_run_id: int, workflow_id: Optional[int] = None, error_message: Optional[str] = None):
+        """
+        Updates the status of a workflow template run. Can be used to attach a workflow_id
+        or report a failure.
+
+        Args:
+            template_run_id: The template run ID from SCITQ_TEMPLATE_RUN_ID
+            workflow_id: Optional ID of the created workflow (if successful)
+            error_message: Optional error message (if failed)
+        """
+        request = taskqueue_pb2.UpdateTemplateRunRequest(
+            template_run_id=template_run_id,
+        )
+        if workflow_id is not None:
+            request.workflow_id = workflow_id
+        if error_message is not None:
+            request.error_message = error_message
+
+        return self.stub.UpdateTemplateRun(request)
+    
+    def get_workspace_root(self, provider: str, region: str) -> str:
+        """
+        Fetches the local workspace root URI for a given provider and region.
+
+        Parameters:
+        - provider (str): The provider identifier (e.g., 'azure.default')
+        - region (str): The region identifier (e.g., 'northeurope')
+
+        Returns:
+        - str: The root URI string for the workspace (e.g., 'aznorth://workspace')
+        """
+        request = taskqueue_pb2.WorkspaceRootRequest(provider=provider, region=region)
+        response = self.stub.GetWorkspaceRoot(request)
+        return response.root_uri
