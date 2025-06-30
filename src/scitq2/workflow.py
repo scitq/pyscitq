@@ -9,39 +9,35 @@ import sys
 
 class Outputs:
     """Represents the declarative outputs of a Step, which can be used in other Steps."""
-    def __init__(self, publish=None, **kwargs):
+    def __init__(self, publish: Optional[str]=None, **kwargs):
         self.globs: Dict[str, str] = kwargs
         self.publish = publish
 
         if publish:
-            if not isinstance(publish, dict):
-                raise ValueError("publish must be a dictionary")
-
-            required_keys = {"type", "path"}
-            if not required_keys.issubset(publish):
-                raise ValueError("publish must include 'type' and 'path'")
-
-            if not isinstance(publish["type"], list):
-                raise ValueError("'publish[\"type\"]' must be a list of output names")
-
-            for output_key in publish["type"]:
-                if output_key not in self.globs:
-                    raise ValueError(f"Cannot publish unknown output: '{output_key}'")
-
-            if "mode" in publish and publish["mode"] not in ("copy", "move"):
-                raise ValueError("publish['mode'] must be 'copy' or 'move'")
+            if not isinstance(publish, str):
+                raise ValueError("publish must be a string (for now)")
 
 class Output:
     """Represents a single output of a task, which can be used in other tasks at runtime."""
-    def __init__(self, step: "Step", grouped: bool = False, globs: Optional[str]=None):
+    def __init__(self, step: "Step", grouped: bool = False, globs: Optional[str]=None, publish: Optional[str] = None):
         self.step = step
         self.grouped = grouped
         self.globs = globs
+        self.publish = publish
 
     def __str__(self):
-        return self.resolve_path("<unset>", self.step.workflow)
+        try:
+            return self.resolve_path()
+        except ValueError as e:
+            return f"Output({self.step.name}, grouped={self.grouped}, globs={self.globs}, publish={self.publish}): {e}" 
 
-    def resolve_path(self, wf: "Workflow") -> Union[str, List[str]]:
+    def resolve_path(self) -> Union[str, List[str]]:
+        """Resolve the output path for this output, based on the workflow and step."""
+        if self.publish:
+            return self.publish
+        
+        wf = self.step.workflow
+        
         def one(task: "Task") -> str:
             return f"{wf.workspace_root}/{wf.full_name}/{task.full_name}/" + (self.globs or "")
 
@@ -54,11 +50,17 @@ class Output:
     def resolve_task_id(self) -> List[int]:
         """Resolve the task ID for this output, if available."""
         if not self.step.tasks:
-            return []
+            if self.grouped:
+                return []
+            else:
+                raise ValueError(f"Step {self.step.name} has no tasks compiled yet")
         if self.step.tasks[-1].task_id is None:
             raise ValueError(f"Step {self.step.name} has no tasks compiled yet")
         if self.grouped:
-            return [task.task_id for task in self.step.tasks]
+            ids = [t.task_id for t in self.step.tasks]
+            if any(tid is None for tid in ids):
+                raise ValueError(f"Step {self.step.name} has some tasks uncompiled yet")
+            return ids
         return [self.step.tasks[-1].task_id]
     
 class GroupedStep:
@@ -72,6 +74,11 @@ class GroupedStep:
             if task.task_id is None:
                 raise ValueError(f"Step {self.step.name} has some tasks uncompiled yet")
         return [task.task_id for task in self.step.tasks]
+    
+    def output(self, name: Optional[str] = None) -> Output:
+        """Create an Output object for this grouped step."""
+        output_glob = self.step.outputs_globs.get(name, "")
+        return Output(step=self.step, grouped=True, globs=output_glob, publish=self.step.publish)
 
 class Task:
     def __init__(self, tag: str, command: str, container: str, 
@@ -135,7 +142,7 @@ class Task:
         for input_item in self.inputs:
             if isinstance(input_item, Output):
                 # If it's an Output, resolve its path
-                resolved_path = input_item.resolve_path(self.step.workflow)
+                resolved_path = input_item.resolve_path()
                 if isinstance(resolved_path, list):
                     resolved_inputs.extend(resolved_path)
                 else:
@@ -146,7 +153,7 @@ class Task:
             else:
                 raise ValueError(f"Invalid input type: {type(input_item)}. Expected str or Output.")
         
-        resolved_output = Output(step=self.step, grouped=False).resolve_path(self.step.workflow)
+        resolved_output = Output(step=self.step, grouped=False).resolve_path()
 
         self.task_id = client.submit_task(
                 step_id=self.step.step_id,
@@ -204,7 +211,7 @@ class Step:
         self.task_spec = task_spec
         self.step_id: Optional[int] = None
         self.outputs_globs: Dict[str, str] = {}
-        self.publish: Optional[dict] = None
+        self.publish: Optional[str] = None
         self.workflow = workflow
         self.naming_strategy = naming_strategy
         if depends is None:
@@ -250,7 +257,7 @@ class Step:
     def output(self, name: str, grouped: bool = False):
         """Create an Output object for this step."""
         output_glob = self.outputs_globs.get(name, "")
-        return Output(step=self, grouped=grouped, globs=output_glob)
+        return Output(step=self, grouped=grouped, globs=output_glob, publish=self.publish)
 
     def compile(self, client: Scitq2Client):
         self.step_id = client.create_step(self.workflow.workflow_id, self.name)
@@ -302,10 +309,12 @@ class Workflow:
         worker_pool: Optional[WorkerPool] = None,
         task_spec: Optional[TaskSpec] = None,
         naming_strategy: Optional[callable] = None,
+        depends: Optional[Union["Step", List["Step"]]] = None,
     ) -> Step:
         if naming_strategy is None:
             naming_strategy = self.task_naming_strategy
-        new_step = Step(name=name, workflow=self, worker_pool=worker_pool, task_spec=task_spec, naming_strategy=naming_strategy)
+        new_step = Step(name=name, workflow=self, worker_pool=worker_pool, task_spec=task_spec, naming_strategy=naming_strategy,
+                        depends=depends)
         if name in self._steps:
             existing = self._steps[name]
             if (existing.worker_pool != new_step.worker_pool or existing.task_spec != new_step.task_spec):

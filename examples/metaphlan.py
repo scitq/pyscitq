@@ -188,11 +188,7 @@ def MetaPhlAnWorkflow(params: Params):
         outputs=Outputs(
             abundances="*.tsv",
             logs="*.log",
-            publish={
-                "type": ["abundances"],
-                "path": f"azure://rnd/results/metaphlan4/{params.identifier}/",
-                "mode": "copy"
-            }
+            publish=f"azure://rnd/results/metaphlan4/{params.identifier}/",
         ),
         task_spec=TaskSpec(cpu=4, mem=10)
     )
@@ -220,11 +216,7 @@ def MetaPhlAnWorkflow(params: Params):
         outputs=Outputs(
             stats1="*.tsv",
             logs="logs.tar.gz",
-            publish={
-                "type": ["stats1", "logs"],
-                "path": f"azure://rnd/results/metaphlan4/{params.identifier}/",
-                "mode": "copy"
-            }
+            publish=f"azure://rnd/results/metaphlan4/{params.identifier}/",
         ),
         task_spec=TaskSpec(cpu=4, mem=10)
     )
