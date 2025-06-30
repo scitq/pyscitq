@@ -6,6 +6,7 @@ import ast
 from typing import Callable, Type, Optional, Dict, get_type_hints
 from scitq2.param import ParamSpec
 import re
+import traceback
 
 class WorkflowDefinitionError(Exception):
     pass
@@ -170,6 +171,7 @@ def run(func: Callable):
             func(param_instance)
         except Exception as e:
             print(f"❌ Failed to parse values or execute workflow: {e}", file=sys.stderr)
+            traceback.print_exc(file=sys.stderr)
             sys.exit(1)
         return
 
@@ -177,5 +179,5 @@ def run(func: Callable):
         func()
         return
 
-    print("❌ Either --params or --values must be provided.", file=sys.stderr)
+    print("❌ Either --metadata, --params or --values must be provided.", file=sys.stderr)
     sys.exit(1)

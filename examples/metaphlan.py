@@ -34,15 +34,13 @@ def MetaPhlAnWorkflow(params: Params):
     if params.data_source == "ENA":
         samples = ENA(
             identifier=params.identifier,
-            group_by="sample",
-            event_name="sample",
+            group_by="sample_accession",
             filter=SampleFilter(S.library_strategy == "WGS")
         )
     elif params.data_source == "SRA":
         samples = SRA(
             identifier=params.identifier,
-            group_by="sample",
-            event_name="sample",
+            group_by="sample_accession",
             filter=SampleFilter(S.library_strategy == "WGS")
         )
     elif params.data_source == "URI":
@@ -56,7 +54,7 @@ def MetaPhlAnWorkflow(params: Params):
             }
         )
 
-    for sample in samples:
+    for sample in samples.values():
     
         fastp = workflow.Step(
             name="fastp",

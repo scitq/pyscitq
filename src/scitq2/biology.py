@@ -3,6 +3,7 @@ import json
 import subprocess
 import urllib.request
 from typing import Any, Dict, Iterator, List, Optional
+import sys
 
 
 # Only fields that exist in ENA (and possibly SRA after remapping)
@@ -10,12 +11,12 @@ ALLOWED_FIELDS = {
     "run_accession", "first_public", "last_updated", 
     "experiment_accession", "library_name", "library_strategy", "library_selection",
     "library_source", "library_layout", "instrument_platform", "instrument_model",
-    "study_accession", "sample_accession", "tax_id", "scientific_name", "sample_alias", "secondary_sample_accession"
+    "study_accession", "sample_accession", "scientific_name", "sample_alias", "secondary_sample_accession",
+    "insert_size", "tax_id", "read_count", "base_count", "nominal_length", "fastq_bytes", "read_count", "base_count"
 }
 
 NUMERIC_FIELDS = {
-    "insert_size", "tax_id", "read_count", "base_count", "average_read_length", "size_mb", "read_count", "base_count", 
-    "average_read_length", "size_mb", "insert_size", 
+    "insert_size", "tax_id", "read_count", "base_count", "nominal_length", "fastq_bytes", "read_count", "base_count", 
 }
 
 
@@ -122,7 +123,11 @@ class Sample:
 
 
 def _filter_fields(record: Dict[str, Any]) -> Dict[str, Any]:
-    return {k: v for k, v in record.items() if k in ALLOWED_FIELDS}
+    return {k: tuple(map(int,v.split(';'))) if k=='fastq_bytes' else 
+                (int(v) if k in NUMERIC_FIELDS else
+                    v
+                )
+            for k, v in record.items() if k in ALLOWED_FIELDS}
 
 
 # Sentinel value for inconsistent fields
@@ -183,25 +188,35 @@ def _group_samples(data: List[Dict[str, Any]], group_by: str, is_sra: bool) -> D
             groups.setdefault(tag, []).append(record)
     return {tag: SampleGroup(tag, records, is_sra) for tag, records in groups.items()}
 
-def ENA(identifier: str, group_by: str, event_name: str, filter: Optional[SampleFilter] = None) -> Iterator[Sample]:
+def ENA(identifier: str, group_by: str, filter: Optional[SampleFilter] = None) -> Iterator[Sample]:
+    if group_by not in ALLOWED_FIELDS:
+        raise ValueError(f"Invalid group_by field: {group_by}. Must be one of {ALLOWED_FIELDS}")
     url = (
         "https://www.ebi.ac.uk/ena/portal/api/filereport"
         f"?accession={identifier}"
         "&result=read_run"
         "&format=json"
         "&fields="
-        "run_accession,first_public,last_updated,read_count,base_count,average_read_length,"
-        "size_mb,experiment_accession,library_name,library_strategy,library_selection,"
-        "library_source,library_layout,insert_size,instrument_platform,instrument_model,"
+        "run_accession,first_public,last_updated,read_count,base_count,nominal_length,"
+        "fastq_bytes,experiment_accession,library_name,library_strategy,library_selection,"
+        "library_source,library_layout,instrument_platform,instrument_model,"
         "study_accession,sample_accession,tax_id,scientific_name,sample_alias,secondary_sample_accession"
     )
-    with urllib.request.urlopen(url) as response:
-        raw = json.load(response)
+    try:
+        with urllib.request.urlopen(url) as response:
+            raw = json.load(response)
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            raise ValueError(f"Identifier '{identifier}' not found in ENA")
+        body = e.read().decode("utf-8", errors="replace").strip()
+        print(f"HTTP request {url} failed with status {e.code}: {e.reason}", file=sys.stderr)
+        print(f"⇨ Response body:\n{body}", file=sys.stderr)
+        raise
 
     data = [_filter_fields(r) for r in raw]
     if filter:
         data = [r for r in data if filter.matches(r)]
-
+    
     return _group_samples(data, group_by, is_sra=False)
 
 
@@ -236,8 +251,8 @@ def SRA(identifier: str, group_by: str, event_name: str, filter: Optional[Sample
             "secondary_sample_accession": r.get("BioSample"),
             "base_count": r.get("bases"),
             "read_count": r.get("spots"),
-            "average_read_length": r.get("avgLength"),
-            "size_mb": r.get("size_MB"),
+            "nominal_length": r.get("avgLength"),
+            "fastq_bytes": r.get("size_MB")* 1_000_000,  # Convert MB to bytes
             "first_public": r.get("ReleaseDate"),
             "last_updated": r.get("LoadDate"),
         }

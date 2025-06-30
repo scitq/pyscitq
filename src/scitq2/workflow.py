@@ -278,7 +278,7 @@ class Step:
 
 
 class Workflow:
-    def __init__(self, name: str, description: str = "", worker_pool: Optional[WorkerPool] = None, language: Optional[Language] = None, tag: Optional[str] = None,
+    def __init__(self, name: str, version:str, description: str = "", worker_pool: Optional[WorkerPool] = None, language: Optional[Language] = None, tag: Optional[str] = None,
                  naming_strategy: callable = dot_join, task_naming_strategy: callable = dot_join, provider: Optional[str] = None, region: Optional[str] = None):
         self.name = name
         self.tag = tag
@@ -294,6 +294,7 @@ class Workflow:
         self.workflow_id: Optional[int] = None
         self.full_name: Optional[str] = None
         self.workspace_root: Optional[str] = None
+        self.version = version
 
     def Step(
         self,
