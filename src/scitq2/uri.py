@@ -1,6 +1,6 @@
 import re
 from pathlib import PurePosixPath
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, Iterator
 from scitq2.grpc_client import Scitq2Client
 from urllib.parse import urlparse
 
@@ -39,7 +39,7 @@ class URI:
         filter: Optional[str] = None,
         event_name: Optional[str] = None,
         field_map: Optional[Dict[str, str]] = None
-    ) -> Dict[str, URIObject]:
+    ) -> Iterator[URIObject]:
         """
         Discover and group URIs from a remote source.
 
@@ -95,7 +95,7 @@ class URI:
             group.append(file_uri)
 
         field_map = field_map or {}
-        result = {}
+        result = []
 
         for key, file_list in groups.items():
             sample_fields = {}
@@ -167,6 +167,6 @@ class URI:
 
 
             sample_fields["files"] = file_list
-            result[key] = URIObject(sample_fields)
+            result.append(URIObject(sample_fields))
 
         return result

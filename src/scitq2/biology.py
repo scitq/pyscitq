@@ -180,15 +180,15 @@ class SampleGroup:
         return self._fields.get(name, [])
 
 
-def _group_samples(data: List[Dict[str, Any]], group_by: str, is_sra: bool) -> Dict[str, SampleGroup]:
+def _group_samples(data: List[Dict[str, Any]], group_by: str, is_sra: bool) -> Iterator[SampleGroup]:
     groups: Dict[str, List[Dict[str, Any]]] = {}
     for record in data:
         tag = record.get(group_by)
         if tag:
             groups.setdefault(tag, []).append(record)
-    return {tag: SampleGroup(tag, records, is_sra) for tag, records in groups.items()}
+    return [SampleGroup(tag, records, is_sra) for tag, records in groups.items()]
 
-def ENA(identifier: str, group_by: str, filter: Optional[SampleFilter] = None) -> Iterator[Sample]:
+def ENA(identifier: str, group_by: str, filter: Optional[SampleFilter] = None) -> Iterator[SampleGroup]:
     if group_by not in ALLOWED_FIELDS:
         raise ValueError(f"Invalid group_by field: {group_by}. Must be one of {ALLOWED_FIELDS}")
     url = (
@@ -220,7 +220,7 @@ def ENA(identifier: str, group_by: str, filter: Optional[SampleFilter] = None) -
     return _group_samples(data, group_by, is_sra=False)
 
 
-def SRA(identifier: str, group_by: str, event_name: str, filter: Optional[SampleFilter] = None) -> Iterator[Sample]:
+def SRA(identifier: str, group_by: str, event_name: str, filter: Optional[SampleFilter] = None) -> Iterator[SampleGroup]:
     cmd = [
         "docker", "run", "--rm", "ncbi/edirect",
         "esearch", "-db", "sra", "-query", identifier,

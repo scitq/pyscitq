@@ -54,7 +54,7 @@ def MetaPhlAnWorkflow(params: Params):
             }
         )
 
-    for sample in samples.values():
+    for sample in samples:
     
         fastp = workflow.Step(
             name="fastp",
