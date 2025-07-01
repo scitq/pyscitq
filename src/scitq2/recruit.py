@@ -1,4 +1,6 @@
 from typing import Any, List, Optional
+from scitq2.constants import DEFAULT_RECRUITER_TIMEOUT
+import sys
 
 
 class FieldExpr:
@@ -16,6 +18,8 @@ class FieldExpr:
 
     def to_protofilter(self):
         val = str(self.value)
+        if self.field in ['region','provider']:
+            print(f"⚠️ Warning: using {self.field} filter may generate high transfer fees, hope you know what you are doing.", file=sys.stderr)
         if self.op == "is":
             return f"{self.field} is {val}"
         return f"{self.field}{self.op}{val}"
@@ -83,6 +87,10 @@ class WorkerPool:
     - Optional recruiter-level parameters such as `max_recruited`.
     - Arbitrary extra options (e.g., container image, zone) passed to the backend.
 
+    NB: while filter expressions accept W.region and W.provider you should refrain to use those and
+    set region and provider at Workflow level to minimize inter-regional transfer fees. Yet you can still
+    use these filters notably when some specific instances are required but beware of transfer fees.
+
     This class also supports estimating task concurrency based on a TaskSpec (cpu/mem needs).
 
     Parameters:
@@ -90,22 +98,39 @@ class WorkerPool:
             Filter expressions to select eligible workers.
         max_recruited: int, optional
             Maximum number of workers this pool can recruit (per step).
-        **extra_options: Any
-            Additional backend-specific parameters (e.g., image="...", zone="...").
+        task_batches: int, optional
+            Number of batches that each worker should do to complete the step workload
+        timeout: int, optional
+            Time (in seconds) to wait for a recyclable worker before resorting to creating a new one
+
 
     Example:
         WorkerPool(
             W.cpu >= 32,
-            W.region.is_default(),
             max_recruited=10,
-            image="ubuntu:22.04"
+            task_batches=2
         )
     """
     
-    def __init__(self, *match: FieldExpr, max_recruited: Optional[int] = None, **extra_options):
+    def __init__(self, *match: FieldExpr, max_recruited: Optional[int] = None, task_batches: int = 1, timeout: int = DEFAULT_RECRUITER_TIMEOUT):
         self.match = set(match)
-        self.max_recruited = max_recruited
-        self.extra_options = extra_options
+        self.extra_options = {}
+        if max_recruited is not None:
+            self.extra_options["max_recruited"]=max_recruited
+        self.extra_options["rounds"]=task_batches
+        self.extra_options["timeout"]=timeout
+
+    @property
+    def task_batches(self):
+        return self.extra_options["rounds"]
+    
+    @property
+    def timeout(self):
+        return self.extra_options["timeout"]
+
+    @property
+    def max_recruited(self):
+        return self.extra_options.get("max_recruited", None)
 
     def compile_filter(self, default_provider: Optional[str] = None, default_region: Optional[str] = None) -> str:
         """ Compiles the worker pool's match expressions into a protofilter string."""
@@ -123,7 +148,7 @@ class WorkerPool:
 
     def build_recruiter(self, task_spec, default_provider: Optional[str] = None, default_region: Optional[str] = None) -> tuple[str, dict]:
         options = dict(self.extra_options)
-        options["filter"] = self.compile_filter(default_provider=default_provider, default_region=default_region)
+        options["protofilter"] = self.compile_filter(default_provider=default_provider, default_region=default_region)
 
         if task_spec is None:
             options["concurrency"] = 1
@@ -148,16 +173,17 @@ class WorkerPool:
 
         return options
     
-    def clone_with(self, *match: FieldExpr, max_recruited: Optional[int] = None, **extra_options) -> "WorkerPool":
+    def clone_with(self, *match: FieldExpr, max_recruited: Optional[int] = None, task_batches: Optional[int] = None, 
+                    timeout: Optional[int] = None) -> "WorkerPool":
         """
         Returns a copy of the current WorkerPool with optionally overridden fields.
         Any provided arguments override the corresponding fields in the original pool.
         """
         new_match = list(match) if match else self.match
-        new_max = max_recruited if max_recruited is not None else self.max_recruited
-        new_options = dict(self.extra_options)
-        new_options.update(extra_options)
-        return WorkerPool(*new_match, max_recruited=new_max, **new_options)
+        return WorkerPool(*new_match, 
+                          max_recruited=max_recruited if max_recruited is not None else self.max_recruited,
+                          task_batches=task_batches if task_batches is not None else self.task_batches,
+                          timeout=timeout if timeout is not None else self.timeout)
     
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, WorkerPool):

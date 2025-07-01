@@ -286,7 +286,7 @@ class Step:
             options = pool.build_recruiter(self.task_spec,
                                            default_provider=self.workflow.provider,
                                            default_region=self.workflow.region)
-            client.create_recruiter(step_id=self.step_id, options=options)
+            client.create_recruiter(step_id=self.step_id, **options)
 
         for task in self.tasks:
             task.compile(client)
@@ -304,6 +304,8 @@ class Step:
 
 
 class Workflow:
+    last_created = None
+
     def __init__(self, name: str, version:str, description: str = "", worker_pool: Optional[WorkerPool] = None, language: Optional[Language] = None, tag: Optional[str] = None,
                  naming_strategy: callable = dot_join, task_naming_strategy: callable = dot_join, provider: Optional[str] = None, region: Optional[str] = None):
         self.name = name
@@ -321,6 +323,9 @@ class Workflow:
         self.full_name: Optional[str] = None
         self.workspace_root: Optional[str] = None
         self.version = version
+        if Workflow.last_created is not None:
+            print(f"⚠️ Warning: it is highly unrecommanded to declare several Workflow in a code, you have previously declared {Workflow.last_created.name} and you redeclare {self.name}", file=sys.stderr)
+        Workflow.last_created = self
 
     def Step(
         self,
@@ -371,8 +376,7 @@ class Workflow:
 
         self.workflow_id = client.create_workflow(
             name=self.full_name,
-            description=self.description,
-            max_recruited=self.max_recruited,
+            maximum_workers=self.max_recruited,
         )
         template_run_id = os.environ.get("SCITQ_TEMPLATE_RUN_ID")
         if template_run_id:

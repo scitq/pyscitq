@@ -3,6 +3,7 @@
 import grpc
 import os
 from scitq2.pb import taskqueue_pb2, taskqueue_pb2_grpc
+from scitq2.constants import DEFAULT_RECRUITER_TIMEOUT
 from typing import Optional, List
 
 DEFAULT_EMBEDDED_CERT = b"""-----BEGIN CERTIFICATE-----
@@ -80,7 +81,7 @@ class Scitq2Client:
         self.channel = grpc.secure_channel(server, composite_credentials)
         self.stub = taskqueue_pb2_grpc.TaskQueueStub(self.channel)
 
-    def create_workflow(self, name: str, description: str = "") -> int:
+    def create_workflow(self, name: str, maximum_workers: Optional[int] = None) -> int:
         """
         Creates a new workflow on the server.
 
@@ -91,7 +92,9 @@ class Scitq2Client:
         Returns:
         - int: The workflow ID
         """
-        request = taskqueue_pb2.WorkflowRequest(name=name, description=description)
+        request = taskqueue_pb2.WorkflowRequest(name=name)
+        if maximum_workers is not None:
+            request.maximum_workers = maximum_workers
         response = self.stub.CreateWorkflow(request)
         return response.workflow_id
 
@@ -174,25 +177,37 @@ class Scitq2Client:
         response = self.stub.SubmitTask(request)
         return response.task_id
 
-    def create_recruiter(self, step_id: int, strategy: str, options: dict) -> int:
+    def create_recruiter(self, *, step_id: int, protofilter: str, concurrency: int, rank: int=1, 
+                         prefetch: int=0, max_recruited: Optional[int]=None, rounds: int=1, timeout: int=DEFAULT_RECRUITER_TIMEOUT) -> int:
         """
         Creates a recruiter for a given step.
 
         Parameters:
         - step_id (int): ID of the step the recruiter belongs to
-        - strategy (str): Recruitment strategy identifier
-        - options (dict): Strategy-specific options as key-value pairs
+        - protofilter (str): Recruitment rule
+        - concurrency (int): Concurrency settings for workers recruited here
+        - prefetch (int): (optional) Prefetch settings for workers recruited here
+        - rank (int): (optional) Enable concurrent recruiters (adjust timeout)
+        - max_recruited (int): (optional) Set an upper limit for this recruiter
+        - rounds (int): (optional) Adjust level of recruitment based on the number of iteration expected for each worker
+        - timeout (int): (optional) Adjust recycling/newly created worker strategy
 
         Returns:
         - int: The recruiter ID
         """
-        request = taskqueue_pb2.RecruiterRequest(
+        request = taskqueue_pb2.Recruiter(
             step_id=step_id,
-            strategy=strategy,
-            options=options
+            protofilter=protofilter,
+            rank=rank,
+            concurrency=concurrency,
+            prefetch=prefetch,
+            rounds=rounds,
+            timeout=timeout,
         )
+        if max_recruited is not None:
+            request.max_workers = max_recruited
         response = self.stub.CreateRecruiter(request)
-        return response.recruiter_id
+        return response.success
     
     def fetch_list(self, uri) -> list[str]:
         """

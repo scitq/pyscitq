@@ -5,6 +5,8 @@ import sys
 import ast
 from typing import Callable, Type, Optional, Dict, get_type_hints
 from scitq2.param import ParamSpec
+from scitq2.workflow import Workflow
+from scitq2.grpc_client import Scitq2Client
 import re
 import traceback
 
@@ -161,6 +163,8 @@ def run(func: Callable):
             print(json.dumps(param_class.schema(), indent=2))
         return
 
+    result = None
+    has_run = False
     if args.values:
         if param_class is None:
             print("❌ --values was provided but the workflow function does not accept parameters.", file=sys.stderr)
@@ -168,16 +172,34 @@ def run(func: Callable):
         try:
             values = json.loads(args.values)
             param_instance = param_class.parse(values)
-            func(param_instance)
+            result = func(param_instance)
+            has_run = True
         except Exception as e:
             print(f"❌ Failed to parse values or execute workflow: {e}", file=sys.stderr)
             traceback.print_exc(file=sys.stderr)
             sys.exit(1)
-        return
 
     if param_class is None:
-        func()
-        return
+        try:
+            result = func()
+            has_run = True
+        except Exception as e:
+            print(f"❌ Failed to parse values or execute workflow: {e}", file=sys.stderr)
+            traceback.print_exc(file=sys.stderr)
+            sys.exit(1)
 
-    print("❌ Either --metadata, --params or --values must be provided.", file=sys.stderr)
-    sys.exit(1)
+    if has_run:
+        if isinstance(result, Workflow):
+            workflow = result
+        elif result is None and Workflow.last_created is not None:
+            workflow = Workflow.last_created
+        else:
+            print(
+                f"❌ {func.__name__} did not return a Workflow object "
+                f"and no Workflow instance was detected."
+            ) 
+            sys.exit(1)
+        workflow.compile(Scitq2Client())
+    else:
+        print("❌ Either --metadata, --params or --values must be provided.", file=sys.stderr)
+        sys.exit(1)
