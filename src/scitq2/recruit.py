@@ -103,7 +103,7 @@ class WorkerPool:
     """
     
     def __init__(self, *match: FieldExpr, max_recruited: Optional[int] = None, **extra_options):
-        self.match = list(match)
+        self.match = set(match)
         self.max_recruited = max_recruited
         self.extra_options = extra_options
 
@@ -158,6 +158,13 @@ class WorkerPool:
         new_options = dict(self.extra_options)
         new_options.update(extra_options)
         return WorkerPool(*new_match, max_recruited=new_max, **new_options)
+    
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, WorkerPool):
+            return False
+        return (self.match == other.match and
+                self.max_recruited == other.max_recruited and
+                self.extra_options == other.extra_options)
 
 
 def compile_protofilter(match: List[FieldExpr]) -> str:

@@ -129,6 +129,7 @@ class Scitq2Client:
         upload_timeout: Optional[float] = None,
         status: str = "P",
         depends: Optional[List[int]] = None,
+        task_name: Optional[str] = None,
     ) -> int:
         """
         Submits a task to a specific step.
@@ -168,6 +169,8 @@ class Scitq2Client:
             request.upload_timeout = upload_timeout
         if depends is not None:
             request.dependency.extend(depends)
+        if task_name is not None:
+            request.task_name = task_name
         response = self.stub.SubmitTask(request)
         return response.task_id
 

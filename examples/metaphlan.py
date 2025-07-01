@@ -149,6 +149,7 @@ def MetaPhlAnWorkflow(params: Params):
         
         metaphlan = workflow.Step(
             name="metaphlan",
+            tag=sample.sample_accession,
             inputs=cond(
                 (params.depth is not None, seqtk.output("fastqs")),
                 default=humanfilter.output("fastqs")
