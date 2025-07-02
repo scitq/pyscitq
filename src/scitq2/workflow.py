@@ -399,3 +399,7 @@ class Workflow:
         for step in self._steps.values():
             step.compile(client)
         return self.workflow_id
+    
+    @property
+    def steps(self) -> List[Step]:
+        return list(self._steps.values())
