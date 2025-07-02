@@ -372,12 +372,24 @@ class Workflow:
             provider=self.provider,
             region=self.region,
         )
-        self.full_name = self.naming_strategy(self.name, self.tag) if self.tag else self.name
 
-        self.workflow_id = client.create_workflow(
-            name=self.full_name,
-            maximum_workers=self.max_recruited,
-        )
+        base_name = self.naming_strategy(self.name, self.tag) if self.tag else self.name
+        for i in range(10):
+            candidate_name = base_name if i == 0 else self.naming_strategy(base_name,str(i))
+            try:
+                self.workflow_id = client.create_workflow(
+                    name=candidate_name,
+                    maximum_workers=self.max_recruited,
+                )
+                self.full_name = candidate_name
+                break
+            except Exception as e:
+                if 'unique constraint "unique_workflow_name"' in str(e):
+                    continue
+                raise  # re-raise non-duplicate errors
+        else:
+            raise RuntimeError(f"Failed to create workflow after 10 attempts due to name conflict")
+
         template_run_id = os.environ.get("SCITQ_TEMPLATE_RUN_ID")
         if template_run_id:
             try:
