@@ -6,6 +6,7 @@ from scitq2.uri import Resource
 from scitq2.constants import DEFAULT_TASK_STATUS, ACTIONS
 import os
 import sys
+from collections.abc import Iterable
 
 class Outputs:
     """Represents the declarative outputs of a Step, which can be used in other Steps."""
@@ -19,9 +20,9 @@ class Outputs:
 
 class Output:
     """Represents a single output of a task, which can be used in other tasks at runtime."""
-    def __init__(self, step: "Step", grouped: bool = False, globs: Optional[str]=None,
+    def __init__(self, task: "Task", grouped: bool = False, globs: Optional[str]=None,
                  publish: Optional[str] = None, action: Optional[str] = "", move: Optional[str] = None):
-        self.step = step
+        self.task = task
         self.grouped = grouped
         self.globs = globs
         self.publish = publish
@@ -39,39 +40,36 @@ class Output:
         try:
             return self.resolve_path()
         except ValueError as e:
-            return f"Output({self.step.name}, grouped={self.grouped}, globs={self.globs}, publish={self.publish}), action={self.action}: {e}" 
+            return f"Output({self.task.full_name}, grouped={self.grouped}, globs={self.globs}, publish={self.publish}), action={self.action}: {e}" 
 
     def resolve_path(self) -> Union[str, List[str]]:
         """Resolve the output path for this output, based on the workflow and step."""
         if self.publish:
             return self.publish
         
-        wf = self.step.workflow
+        wf = self.task.step.workflow
         
-        def one(task: "Task") -> str:
+        def build_path(task: "Task") -> str:
             return f"{wf.workspace_root}/{wf.full_name}/{task.full_name}/" + (self.globs or "") + self.action
 
         if self.grouped:
-            return [one(task) for task in self.step.tasks]
-        if not self.step.tasks:
-            raise ValueError(f"Step {self.step.name} has no tasks to get output from")
-        return one(self.step.tasks[-1])
+            return [build_path(task) for task in self.task.step.tasks]
+        return build_path(self.task)
 
     def resolve_task_id(self) -> List[int]:
         """Resolve the task ID for this output, if available."""
-        if not self.step.tasks:
-            if self.grouped:
-                return []
-            else:
-                raise ValueError(f"Step {self.step.name} has no tasks compiled yet")
-        if self.step.tasks[-1].task_id is None:
-            raise ValueError(f"Step {self.step.name} has no tasks compiled yet")
         if self.grouped:
-            ids = [t.task_id for t in self.step.tasks]
+            ids = [t.task_id for t in self.task.step.tasks]
             if any(tid is None for tid in ids):
-                raise ValueError(f"Step {self.step.name} has some tasks uncompiled yet")
+                raise ValueError(f"Step {self.task.step.name} has some tasks uncompiled yet")
             return ids
-        return [self.step.tasks[-1].task_id]
+        if self.task.task_id is None:
+            raise ValueError(f"Task {self.task.full_name} has not been compiled yet")
+        return [self.task.task_id]
+    
+    def __repr__(self):
+        return f"<Output of {self.task.full_name if not self.grouped else 'grouped '+self.task.step.name}+' tasks' {self.globs}>"
+
     
 class GroupedStep:
     """A Step that groups multiple tasks together, allowing for collective task_id resolution."""
@@ -89,7 +87,7 @@ class GroupedStep:
         """Create an Output object for this grouped step."""
         output_glob = self.step.outputs_globs.get(name, "")
 
-        return Output(step=self.step, grouped=True, globs=output_glob, publish=self.step.publish, action=action, move=move)
+        return Output(task=self.step.task, grouped=True, globs=output_glob, publish=self.step.publish, action=action, move=move)
 
 class Task:
     def __init__(self, tag: str, command: str, container: str, 
@@ -165,7 +163,7 @@ class Task:
             else:
                 raise ValueError(f"Invalid input type: {type(input_item)}. Expected str or Output.")
         
-        resolved_output = Output(step=self.step, grouped=False).resolve_path()
+        resolved_output = Output(task=self, grouped=False).resolve_path()
 
         # Resolve resources
         resolved_resources = list(map(str, self.resources))
@@ -223,7 +221,7 @@ def dot_join(*args: str) -> str:
 
 class Step:
     def __init__(self, name: str, workflow: "Workflow", worker_pool: Optional[WorkerPool] = None, task_spec: Optional[TaskSpec] = None,
-                 naming_strategy: callable = dot_join, depends: Optional[Union["Step",List["Step"]]] = None):
+                 naming_strategy: callable = dot_join):
         self.name = name
         self.tasks: List[Task] = []
         self.worker_pool = worker_pool
@@ -233,12 +231,6 @@ class Step:
         self.publish: Optional[str] = None
         self.workflow = workflow
         self.naming_strategy = naming_strategy
-        if depends is None:
-            self.depends = None
-        elif isinstance(depends, Step):
-            self.depends = [depends]
-        elif isinstance(depends, list) and all(isinstance(d, Step) for d in depends):
-            self.depends = depends
 
     def add_task(
         self,
@@ -250,6 +242,7 @@ class Step:
         inputs: Optional[Union[str, Output, List[str], List[Output]]] = None,
         resources: Optional[Union[Resource, List[Resource]]] = None,
         language: Optional[Language] = None,
+        depends: Optional[Union["Step",List["Step"]]] = None
     ):
         if outputs:
             if self.outputs_globs and outputs.globs != self.outputs_globs:
@@ -269,14 +262,25 @@ class Step:
         else:
             resources_list = resources or []
 
+        if depends is None:
+            resolved_depends = []
+        elif isinstance(depends, Step):
+            resolved_depends = [depends.task]
+        elif isinstance(depends, Iterable) and all(isinstance(dep, Step) for dep in depends):
+            resolved_depends = [dep.task for dep in depends]
+        else:
+            raise ValueError(f"""Depends not of the right kind, should be a Step or list of Step""")
+
         task = Task(tag=tag, step=self, command=command, container=container, outputs=output_mapping, 
-                    inputs=inputs, resources=resources_list, language=language, depends=self.depends)
+                    inputs=inputs, resources=resources_list, language=language, depends=resolved_depends)
         self.tasks.append(task)
 
-    def output(self, name: str, grouped: bool = False, move: Optional[str] = None, action: Optional[str] = ""):
-        """Create an Output object for this step."""
+    def output(self, name: str, grouped: bool = False, move: Optional[str] = None, action: Optional[str] = "", task: Optional[Task] = None):
+        """Create an Output object for this step last task (or the whole step if grouped is True or a specific task if task is specified)."""
         output_glob = self.outputs_globs.get(name, "")
-        return Output(step=self, grouped=grouped, globs=output_glob, publish=self.publish, move=move, action=action)
+        if task is None:
+            task = self.task
+        return Output(task=task, grouped=grouped, globs=output_glob, publish=self.publish, move=move, action=action)
 
     def compile(self, client: Scitq2Client):
         self.step_id = client.create_step(self.workflow.workflow_id, self.name)
@@ -298,10 +302,14 @@ class Step:
     @property
     def container(self) -> str:
         """Return the container for the last task in this step."""
+        return self.task.container
+
+    @property
+    def task(self) -> Task:
+        """Return the latest task for this step."""
         if not self.tasks:
             raise ValueError(f"Step {self.name} has no tasks defined")
-        return self.tasks[-1].container
-
+        return self.tasks[-1]
 
 class Workflow:
     last_created = None
@@ -345,8 +353,7 @@ class Workflow:
     ) -> Step:
         if naming_strategy is None:
             naming_strategy = self.task_naming_strategy
-        new_step = Step(name=name, workflow=self, worker_pool=worker_pool, task_spec=task_spec, naming_strategy=naming_strategy,
-                        depends=depends)
+        new_step = Step(name=name, workflow=self, worker_pool=worker_pool, task_spec=task_spec, naming_strategy=naming_strategy)
         if name in self._steps:
             existing = self._steps[name]
             if (existing.worker_pool != new_step.worker_pool or existing.task_spec != new_step.task_spec):
@@ -364,7 +371,7 @@ class Workflow:
         effective_language = language or self.language
         if tag is None and step.tasks:
             raise RuntimeError(f"Step '{name}' has no tag specified and has several iterations which is forbidden")
-        step.add_task(tag=tag, command=command, container=container, outputs=outputs, inputs=inputs, resources=resources, language=effective_language)
+        step.add_task(tag=tag, command=command, container=container, outputs=outputs, inputs=inputs, resources=resources, language=effective_language, depends=depends)
         return step
 
     def compile(self, client: Scitq2Client) -> int:
