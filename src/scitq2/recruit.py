@@ -1,13 +1,13 @@
 from typing import Any, List, Optional
 from scitq2.constants import DEFAULT_RECRUITER_TIMEOUT
 import sys
+from dataclasses import dataclass
 
-
+@dataclass(frozen=True)
 class FieldExpr:
-    def __init__(self, field: str, op: str, value: Any):
-        self.field = field
-        self.op = op
-        self.value = value
+    field: str
+    op: str
+    value: Any
 
     def to_dict(self):
         return {
@@ -18,8 +18,6 @@ class FieldExpr:
 
     def to_protofilter(self):
         val = str(self.value)
-        if self.field in ['region','provider']:
-            print(f"⚠️ Warning: using {self.field} filter may generate high transfer fees, hope you know what you are doing.", file=sys.stderr)
         if self.op == "is":
             return f"{self.field} is {val}"
         return f"{self.field}{self.op}{val}"
@@ -140,9 +138,13 @@ class WorkerPool:
 
         if default_provider and "provider" not in existing_fields:
             constraints.append(FieldExpr("provider", "==", default_provider))
+        else:
+            print(f"⚠️ Warning: using provider filter may generate high transfer fees, hope you know what you are doing.", file=sys.stderr)
 
         if default_region and "region" not in existing_fields:
             constraints.append(FieldExpr("region", "==", default_region))
+        else:
+            print(f"⚠️ Warning: using region filter may generate high transfer fees, hope you know what you are doing.", file=sys.stderr)
 
         return compile_protofilter(constraints)
 
