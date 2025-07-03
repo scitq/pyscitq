@@ -389,10 +389,7 @@ class Workflow:
 
         template_run_id = os.environ.get("SCITQ_TEMPLATE_RUN_ID")
         if template_run_id:
-            try:
-                client.update_template_run(template_run_id=int(template_run_id), workflow_id=self.workflow_id)
-            except Exception as e:
-                print(f"⚠️ Warning: failed to update template run: {e}", file=sys.stderr)
+            client.update_template_run(template_run_id=int(template_run_id), workflow_id=self.workflow_id)
         for step in self._steps.values():
             step.compile(client)
         return self.workflow_id
