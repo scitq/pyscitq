@@ -4,7 +4,9 @@ class Language:
     """Abstract base class for workflow step languages (Shell, Raw, etc)."""
     def compile_command(self, command: str) -> str:
         raise NotImplementedError("Must be implemented by subclasses.")
-
+    def executable(self) -> Optional[str]:
+        return None
+        
 
 class Raw(Language):
     """Default language: run the command as-is without shell injection or helpers."""
@@ -13,7 +15,7 @@ class Raw(Language):
 
 
 class Shell(Language):
-    VALID_SHELLS = {"bash", "sh"}
+    VALID_SHELLS = {"bash", "sh", "dash", "zsh"}
 
     ERREXIT = "errexit"
     PIPEFAIL = "pipefail"
@@ -28,6 +30,9 @@ class Shell(Language):
 
         if self.shell != "bash" and self.PIPEFAIL in self.options:
             raise ValueError("PIPEFAIL is only supported in 'bash'")
+
+    def executable(self):
+        return self.shell
 
     def include_helpers(self) -> bool:
         return self.HELPERS in self.options
@@ -52,7 +57,7 @@ class Shell(Language):
     def compile_command(self, command: str) -> str:
         pre = self.prelude()
         final = f"{pre}\n{command}" if pre else command
-        return f"{self.shell} -c '{final}'"
+        return final
 
 
 SHELL_HELPERS = r"""

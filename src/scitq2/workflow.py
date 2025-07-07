@@ -47,8 +47,13 @@ class Output:
         """Resolve the output path for this output, based on the workflow and step."""
         wf = self.task.step.workflow
         
-        def build_path(task: "Task") -> str:
-            return task.publish if task.publish is not None else f"{wf.workspace_root}/{wf.full_name}/{task.full_name}/" + (self.globs or "") + self.action
+        def build_path(task: "Task") -> Optional[str]:
+            if task.publish is not None:
+                return task.publish
+            elif wf.workspace_root is not None:
+                return f"{wf.workspace_root}/{wf.full_name}/{task.full_name}/" + (self.globs or "") + self.action
+            else:
+                return None
 
         if self.grouped:
             return [build_path(task) for task in self.task.step.tasks]
@@ -116,6 +121,7 @@ class Task:
     def compile(self, client: Scitq2Client):
         # Resolve command using the language's compile_command method
         resolved_command = self.language.compile_command(self.command)
+        resolved_shell = self.language.executable()
 
         # Resolve dependencies
         resolved_depends = set()
@@ -165,6 +171,7 @@ class Task:
         self.task_id = client.submit_task(
                 step_id=self.step.step_id,
                 command=resolved_command,
+                shell=resolved_shell,
                 container=self.container,
                 depends=resolved_depends,
                 inputs=resolved_inputs,
@@ -365,10 +372,13 @@ class Workflow:
         return step
 
     def compile(self, client: Scitq2Client) -> int:
-        self.workspace_root = client.get_workspace_root(
-            provider=self.provider,
-            region=self.region,
-        )
+        if self.provider:
+            self.workspace_root = client.get_workspace_root(
+                provider=self.provider,
+                region=self.region,
+            )
+        else:
+            self.workspace_root = None
 
         base_name = self.naming_strategy(self.name, self.tag) if self.tag else self.name
         for i in range(10):
