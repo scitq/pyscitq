@@ -6,6 +6,10 @@ authors = [{ name="Raynald de Lahondès" }]
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.8"
+dependencies = [
+    "grpcio>=1.63.0",
+    "grpcio-tools>=1.63.0"
+]
 
 [project.urls]
 "Homepage" = "https://github.com/gmtsciencedev/pyscitq2"
@@ -17,10 +21,3 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["src"]
 
-[tool.poetry.dependencies]
-python = ">=3.9"
-grpcio = "^1.63.0"
-grpcio-tools = "^1.63.0"  # if you're generating stubs from .proto
-
-[tool.poetry.dev-dependencies]
-pytest = "^8.2.0"
