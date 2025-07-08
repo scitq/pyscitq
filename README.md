@@ -1,5 +1,8 @@
-# pyscitq2
+# pyscitq
 Python workflow lib for scitq2
+
+## Description
+This library is a python DSL for scitq v2 engine. It enables the creation of workflow in a simple and clear python code that is self-descriptive.
 
 ## gRPC update
 
