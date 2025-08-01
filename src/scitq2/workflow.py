@@ -184,11 +184,12 @@ class Task:
 
 
 class TaskSpec:
-    def __init__(self, *, cpu=None, mem=None, prefetch=None):
-        if cpu is None and mem is None:
-            raise ValueError("TaskSpec must define at least one of cpu or mem")
+    def __init__(self, *, cpu=None, mem=None, concurrency=None, prefetch=None):
+        if concurrency is None and cpu is None and mem is None:
+            raise ValueError("TaskSpec must define at least one of concurrency, cpu or mem")
         self.cpu = cpu
         self.mem = mem
+        self.concurrency = concurrency
         self.prefetch = self._parse_prefetch(prefetch)
 
     def _parse_prefetch(self, p):
@@ -204,7 +205,7 @@ class TaskSpec:
         ) == (other.cpu, other.mem, other.prefetch)
     
     def __str__(self):
-        return f"TaskSpec(cpu={self.cpu}, mem={self.mem}, prefetch={self.prefetch})"
+        return f"TaskSpec(cpu={self.cpu}, mem={self.mem}, conurrency={self.concurrency}, prefetch={self.prefetch})"
 
 
 def underscore_join(*args: str) -> str:

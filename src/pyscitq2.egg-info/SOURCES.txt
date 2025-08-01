@@ -1,8 +1,10 @@
+LICENSE
 README.md
 pyproject.toml
 src/pyscitq2.egg-info/PKG-INFO
 src/pyscitq2.egg-info/SOURCES.txt
 src/pyscitq2.egg-info/dependency_links.txt
+src/pyscitq2.egg-info/requires.txt
 src/pyscitq2.egg-info/top_level.txt
 src/scitq2/__init__.py
 src/scitq2/biology.py
