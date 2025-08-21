@@ -1,6 +1,6 @@
 from scitq2 import *
 
-LOREM_IPSUM = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."
+LOREM_IPSUM = "Lorem ipsum dolor"
 
 class Params(metaclass=ParamSpec):
     name = Param.string(required=True, help="State your name here")
@@ -14,7 +14,7 @@ def hellogoodbye(params: Params):
         description="Mini workflow example, with parallel steps, dependencies and failures",
         version="1.0.0",
         tag=f"{params.name}",
-        language=Shell("sh", options=(Shell.HELPERS, Shell.ERREXIT)),
+        language=Shell("sh", options=(Shell.ERREXIT)),
         worker_pool=WorkerPool(W.provider=="local.local", W.region=="local")
     )
 
@@ -22,7 +22,7 @@ def hellogoodbye(params: Params):
         step = workflow.Step(
             name="hello",
             tag=str(i),
-            command=fr"for i in Hello, {params.name} did you know that {LOREM_IPSUM}; do echo $i; sleep 1; done && if [ $((RANDOM % 100)) -lt {params.failure_rate} ]; then echo fail; exit 1; fi",
+            command=fr"for i in Hello {i}, {params.name} did you know that {LOREM_IPSUM}; do echo $i; sleep 1; done && if [ $((RANDOM % 100)) -lt {params.failure_rate} ]; then echo fail; exit 1; fi",
             container="alpine",
             retry=2,
             task_spec=TaskSpec(concurrency=params.how_many)
@@ -30,8 +30,8 @@ def hellogoodbye(params: Params):
         other_step = workflow.Step(
             name="goodbye",
             tag=str(i),
-            dependencies=[step],
-            command=fr"for i in Goodbye, {params.name} did you know that {LOREM_IPSUM}; do echo $i; sleep 1; done && if [ $((RANDOM % 100)) -lt {params.failure_rate} ]; then echo fail; exit 1; fi",
+            depends=step,
+            command=fr"for i in Goodbye {i}, {params.name} did you know that {LOREM_IPSUM}; do echo $i; sleep 1; done && if [ $((RANDOM % 100)) -lt {params.failure_rate} ]; then echo fail; exit 1; fi",
             container="alpine",
             retry=2,
             task_spec=TaskSpec(concurrency=params.how_many)
