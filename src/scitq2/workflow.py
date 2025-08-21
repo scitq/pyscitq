@@ -98,7 +98,8 @@ class Task:
                  resources: Optional[List[Resource]] = None, 
                  language: Optional[Language] = None,
                  depends: Optional[Union[List["Task"],"GroupedStep"]] = None,
-                 publish: Optional[str]=None):
+                 publish: Optional[str]=None,
+                 retry: Optional[int]=None):
         self.tag = tag
         self.command = command
         self.container = container
@@ -117,6 +118,7 @@ class Task:
 
         self.resources = resources or []
         self.language = language or Raw()
+        self.retry = retry
     
     def compile(self, client: Scitq2Client):
         # Resolve command using the language's compile_command method
@@ -178,7 +180,8 @@ class Task:
                 output=resolved_output,
                 resources=resolved_resources,
                 status=DEFAULT_TASK_STATUS,
-                task_name=self.full_name
+                task_name=self.full_name,
+                retry=self.retry,
             )
 
 
@@ -243,7 +246,8 @@ class Step:
         inputs: Optional[Union[str, Output, List[str], List[Output]]] = None,
         resources: Optional[Union[Resource, List[Resource]]] = None,
         language: Optional[Language] = None,
-        depends: Optional[Union["Step",List["Step"]]] = None
+        depends: Optional[Union["Step",List["Step"]]] = None,
+        retry: Optional[int]=None
     ):
         if outputs:
             if self.outputs_globs and outputs.globs != self.outputs_globs:
@@ -266,7 +270,7 @@ class Step:
 
         task = Task(tag=tag, step=self, command=command, container=container,
                     inputs=inputs, resources=resources_list, language=language, 
-                    depends=resolved_depends, publish=outputs.publish if outputs else None)
+                    depends=resolved_depends, publish=outputs.publish if outputs else None, retry=retry)
         self.tasks.append(task)
 
     def output(self, name: Optional[str] = None, grouped: bool = False, move: Optional[str] = None, action: Optional[str] = "", task: Optional[Task] = None):
@@ -347,6 +351,7 @@ class Workflow:
         task_spec: Optional[TaskSpec] = None,
         naming_strategy: Optional[callable] = None,
         depends: Optional[Union["Step", List["Step"]]] = None,
+        retry: Optional[int] = None
     ) -> Step:
         if naming_strategy is None:
             naming_strategy = self.task_naming_strategy
@@ -369,7 +374,7 @@ class Workflow:
         if tag is None and step.tasks:
             raise RuntimeError(f"Step '{name}' has no tag specified and has several iterations which is forbidden")
         step.add_task(tag=tag, command=command, container=container, outputs=outputs, inputs=inputs, resources=resources, 
-                      language=effective_language, depends=depends)
+                      language=effective_language, depends=depends, retry=retry)
         return step
 
     def compile(self, client: Scitq2Client) -> int:
