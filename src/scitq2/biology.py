@@ -2,8 +2,12 @@ import csv
 import json
 import subprocess
 import urllib.request
-from typing import Any, Dict, Iterator, List, Optional
+from typing import Any, Dict, Iterator, List, Optional, Iterable, Mapping, Literal
+import re
+from .uri import URI, URIObject
 import sys
+
+from typing import Optional, List, Dict
 
 
 # Only fields that exist in ENA (and possibly SRA after remapping)
@@ -152,23 +156,36 @@ def with_properties(cls):
 
 @with_properties
 class SampleGroup:
-    def __init__(self, tag: str, records: List[Dict[str, Any]], is_sra: bool):
+    def __init__(self, tag: str, records: List[Dict[str, Any]], download_method: str = '', from_uri: bool = False):
         self.tag = tag
         self._records = records
-        self._is_sra = is_sra
+        if download_method:
+            self._uri_option = '@' + download_method
+        else:
+            self._uri_option = ''
+        self.from_uri = from_uri
         self._compute_fields()
 
     def _compute_fields(self):
         self._fields = {}
         for key in ALLOWED_FIELDS:
-            values = {r.get(key) for r in self._records if key in r}
+            values = {r[key] for r in self._records if key in r}
             values.discard(None)
             self._fields[key] = list(values)
 
-        self.fastqs = [
-            f"run+fastq{'@sra' if self._is_sra else ''}://{r['run_accession']}"
-            for r in self._records if 'run_accession' in r
-        ]
+        # Prefer directly provided FASTQ URIs if present (URI-based discovery),
+        # otherwise fall back to building from run_accession (ENA/SRA sources).
+        if self.from_uri:
+            uris: List[str] = []
+            for r in self._records:
+                uris.extend(r['fastqs'])
+            self.fastqs = uris
+        else:
+            self.fastqs = [
+                f"run+fastq{self._uri_option}://{r['run_accession']}" if isinstance(r, dict) else f"run+fastq{self._uri_option}://{getattr(r, 'run_accession')}"
+                for r in self._records
+                if (isinstance(r, dict) and ('run_accession' in r)) or (not isinstance(r, dict) and hasattr(r, 'run_accession'))
+            ]
 
     def _get_singular(self, name: str):
         values = self._fields.get(name, [])
@@ -180,15 +197,15 @@ class SampleGroup:
         return self._fields.get(name, [])
 
 
-def _group_samples(data: List[Dict[str, Any]], group_by: str, is_sra: bool) -> Iterator[SampleGroup]:
+def _group_samples(data: List[Dict[str, Any]], group_by: str, download_method: str = '') -> Iterator[SampleGroup]:
     groups: Dict[str, List[Dict[str, Any]]] = {}
     for record in data:
         tag = record.get(group_by)
         if tag:
             groups.setdefault(tag, []).append(record)
-    return [SampleGroup(tag, records, is_sra) for tag, records in groups.items()]
+    return [SampleGroup(tag, records, download_method) for tag, records in groups.items()]
 
-def ENA(identifier: str, group_by: str, filter: Optional[SampleFilter] = None) -> Iterator[SampleGroup]:
+def ENA(identifier: str, group_by: str, filter: Optional[SampleFilter] = None, use_ftp: bool = False, use_aspera: bool = False) -> Iterator[SampleGroup]:
     if group_by not in ALLOWED_FIELDS:
         raise ValueError(f"Invalid group_by field: {group_by}. Must be one of {ALLOWED_FIELDS}")
     url = (
@@ -217,7 +234,7 @@ def ENA(identifier: str, group_by: str, filter: Optional[SampleFilter] = None) -
     if filter:
         data = [r for r in data if filter.matches(r)]
     
-    return _group_samples(data, group_by, is_sra=False)
+    return _group_samples(data, group_by, download_method='ena-aspera' if use_aspera else 'ena-ftp' if use_ftp else '')
 
 
 def SRA(identifier: str, group_by: str, event_name: str, filter: Optional[SampleFilter] = None) -> Iterator[SampleGroup]:
@@ -261,4 +278,189 @@ def SRA(identifier: str, group_by: str, event_name: str, filter: Optional[Sample
     if filter:
         data = [r for r in data if filter.matches(r)]
 
-    return _group_samples(data, group_by, is_sra=True)
+    return _group_samples(data, group_by, download_method='sra-tools')
+
+# -----------------------------
+# FASTQ discovery on top of URI
+# -----------------------------
+
+_READ_REGEX = re.compile(r".*(1|2)\.f.*q(\.gz)?$", re.IGNORECASE)
+
+
+def find_sample_parity(fastqs: List[str]) -> Dict[str, Any]:
+    """classify a sample as paired/single/unknown based on FASTQ names"""
+    r1_list: List[str] = []
+    r2_list: List[str] = []
+    extras: List[str] = []
+    for fq in fastqs:
+        m = _READ_REGEX.match(fq)
+        if m:
+            if m.group(1) == "1":
+                r1_list.append(fq)
+            elif m.group(1) == "2":
+                r2_list.append(fq)
+            else:
+                extras.append(fq)
+        else:
+            extras.append(fq)
+    nR1, nR2 = len(r1_list), len(r2_list)
+    if nR1 == nR2 and nR1 > 0:
+        detected = "paired"
+    elif (nR1 == 0 and nR2 == 0) or (nR1 > 0 and nR2 == 0) or (nR2 > 0 and nR1 == 0):
+        detected = "single"
+    else:
+        detected = "unknown"  # nR1>0, nR2>0, nR1!=nR2
+    return {
+        "detected": detected,
+        "R1": r1_list,
+        "R2": r2_list,
+        "extras": extras,
+        "nR1": nR1,
+        "nR2": nR2,
+    }
+
+def FASTQ(
+    roots: Iterable[str] | str,
+    *,
+    group_by: str = "folder",             # "folder", "pattern.<name>", or "none"
+    layout: Literal["auto", "paired", "single"] = "auto",
+    only_read1: Optional[bool] = None,     # defaults True only when layout=="single"
+    strict_pairs: bool = False,
+    allow_unknown: bool = True,            # if False, drop unknown when aligning to single
+    study_vote: Literal["majority", "all"] = "majority",
+    filter: Optional[str] = None,
+    pattern: Optional[str] = None,
+) -> List[SampleGroup]:
+    """
+    High-level FASTQ source on top of URI.find().
+
+    Returns a list of sample dicts with keys:
+      - sample_accession, project_accession
+      - detected_layout: 'paired' | 'single' | 'unknown'
+      - study_layout: 'paired' | 'single' (when layout='auto')
+      - effective_layout: 'paired' | 'single' (post-alignment)
+      - reads: { 'R1': [...], 'R2': [...] } when effective_layout == 'paired'
+      - fastqs: list[str] (final selection after enforcement)
+      - notes: list[str]
+      - any extra fields requested via `fields`
+    """
+
+    # Normalize roots to a list for URI.find
+    if isinstance(roots, str):
+        roots_list = [roots]
+    else:
+        roots_list = list(roots)
+
+    # Build field_map for URI.find consistent with user's conventions
+    field_map: Dict[str, str] = {
+        "fastqs": "file.uris",
+    }
+    # group id resolution
+    if group_by == "folder":
+        field_map.update({
+            "sample_accession": "folder.name",
+            "project_accession": "folder.basename",
+        })
+    elif group_by.startswith("pattern."):
+        group_name = group_by.split(".", 1)[1]
+        field_map.update({
+            "sample_accession": f"file.pattern.{group_name}",
+            "project_accession": "folder.basename",  # may be Undefined if not meaningful
+        })
+    elif group_by == "none":
+        field_map.update({
+            "sample_accession": "file.basename",
+            "project_accession": "folder.basename",
+        })
+    else:
+        raise ValueError("group_by must be 'folder', 'pattern.<name>', or 'none'")
+
+    # Call URI.find once per root and concatenate results
+    fastq_uris: List[URIObject] = []
+    if filter:
+        filter = filter + '.f*q.gz'
+    else:
+        filter = '*.f*q.gz'
+    for root in roots_list:
+        part = URI.find(root, group_by=group_by, pattern=pattern, filter=filter, field_map=field_map)
+        # Expect `part` to be a list/iter of dicts with keys from fm
+        fastq_uris.extend(list(part))
+
+    # First pass: classify per-sample (collect tuples)
+    classified_samples: List[Dict[str, any]] = []
+    paired_count = 0
+    nonpaired_count = 0
+
+    for uri in fastq_uris:
+        fastqs = list(uri.fastqs or [])
+        sample_fastqs = find_sample_parity(fastqs)
+        detected_layout = sample_fastqs["detected"]
+        if detected_layout == "paired":
+            paired_count += 1
+        else:
+            nonpaired_count += 1
+        sample = {
+            "sample_accession": getattr(uri, "sample_accession", None),
+            "project_accession": getattr(uri, "project_accession", None),
+            "fastqs": fastqs,
+            "detected_layout": detected_layout,
+            "R1": sample_fastqs["R1"],
+            "R2": sample_fastqs["R2"],
+            "extras": sample_fastqs["extras"],
+        }
+        classified_samples.append(sample)
+
+    # Decide study vote if needed
+    if layout == "auto":
+        if study_vote == "all":
+            study_layout = "paired" if (paired_count > 0 and nonpaired_count == 0) else "single"
+        else:  # majority
+            study_layout = "paired" if paired_count >= nonpaired_count else "single"
+    elif layout == "paired":
+        study_layout = "paired"
+    else:
+        study_layout = "single"
+
+    # Alignment & selection
+    out: List[SampleGroup] = []
+    for sample in classified_samples:
+        if layout == "auto":
+            if study_layout == "single":
+                sample['effective_layout'] = "single"
+                final_fastqs = sample['fastqs']  # keep as-is
+            else:  # paired study
+                if sample['detected_layout'] == "paired":
+                    sample['effective_layout'] = "paired"
+                    final_fastqs = (sample["R1"] + sample["R2"]) if strict_pairs else \
+                        (sample["R1"] + sample["R2"] + sample["extras"])
+                    #if strict_pairs and extras:
+                    #    notes.append("excluded extras (strict_pairs)")
+                else:
+                    sample['effective_layout'] = "single"
+                    final_fastqs = sample['fastqs']
+        elif layout == "paired":
+            if sample["detected_layout"] != "paired":
+                # one day print or log a warning
+                continue
+            else:
+                sample['effective_layout'] = "paired"
+                final_fastqs = (sample["R1"] + sample["R2"]) if strict_pairs else \
+                        (sample["R1"] + sample["R2"] + sample["extras"])
+                #if strict_pairs and extras:
+                #    notes.append("excluded extras (strict_pairs)")
+        else:  # layout == "single"
+            sample['effective_layout'] = "single"
+            if sample["detected_layout"] == "paired":
+                if (only_read1 or only_read1 is None)  and sample["R1"]:
+                    final_fastqs = sample["R1"]
+                else:
+                    continue
+            elif sample["detected_layout"] == "single" or allow_unknown:
+                final_fastqs = sample["fastqs"]
+
+        sample["library_layout"] = study_layout
+        sample["fastqs"] = final_fastqs
+
+        out.append(SampleGroup(sample.get("sample_accession",""), [sample], from_uri=True))
+
+    return out

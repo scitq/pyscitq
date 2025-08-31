@@ -45,10 +45,10 @@ class URI:
 
         Args:
             uri_base: Base URI path to explore.
-            group_by: 'folder', 'pattern', or None (group per file).
-            pattern: Regex pattern (with named groups) for 'pattern' grouping.
+            group_by: 'folder', 'pattern.<group_name>', or None (group per file).
+            pattern: Regex pattern (with named groups) for 'pattern' grouping. Named groups can either be used in event_name (group_by='pattern.<group_name>') or field_map (with file.pattern.<group_name>).
             filter: Glob expression for server-side filtering, e.g. '*.fastq.gz'.
-            field_map: Output field name → expression (file.name, folder.name, etc)
+            field_map: Output field name → expression (file.name, folder.name, file.pattern.<group_name>, etc)
             event_name: Name of the event to group by (e.g., 'folder.name' - default when group_by , 'file.name', 'file.pattern.name').
 
         Returns:
@@ -62,8 +62,8 @@ class URI:
         if event_name is None:
             if group_by == "folder":
                 event_name = "folder.name"
-            elif group_by == "pattern":
-                event_name = "file.pattern.name"
+            elif group_by.startswith("pattern"):
+                event_name = "file."+group_by
             else:
                 event_name = "file.name"
 
@@ -145,7 +145,7 @@ class URI:
                             sample_fields[dest_field] = path.parent.parent.name
 
                 elif expr.startswith("file.pattern."):
-                    if group_by != "pattern":
+                    if not group_by.startswith("pattern"):
                         raise ValueError(f"Cannot use '{expr}' outside pattern-based grouping")
                     name = expr.split(".", 2)[2]
                     if is_plural:
