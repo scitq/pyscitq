@@ -2,12 +2,11 @@ import csv
 import json
 import subprocess
 import urllib.request
-from typing import Any, Dict, Iterator, List, Optional, Iterable, Mapping, Literal
+from typing import Any, Dict, Iterator, List, Optional, Iterable, Literal
 import re
 from .uri import URI, URIObject
 import sys
 
-from typing import Optional, List, Dict
 
 
 # Only fields that exist in ENA (and possibly SRA after remapping)
@@ -16,13 +15,19 @@ ALLOWED_FIELDS = {
     "experiment_accession", "library_name", "library_strategy", "library_selection",
     "library_source", "library_layout", "instrument_platform", "instrument_model",
     "study_accession", "sample_accession", "scientific_name", "sample_alias", "secondary_sample_accession",
-    "insert_size", "tax_id", "read_count", "base_count", "nominal_length", "fastq_bytes", "read_count", "base_count"
+    "insert_size", "tax_id", "read_count", "base_count", "nominal_length", "fastq_bytes"
 }
 
 NUMERIC_FIELDS = {
-    "insert_size", "tax_id", "read_count", "base_count", "nominal_length", "fastq_bytes", "read_count", "base_count", 
+    "insert_size", "tax_id", "read_count", "base_count", "nominal_length", "fastq_bytes" 
 }
 
+
+def try_float(s):
+    try:
+        return float(s)
+    except:
+        return 0.0
 
 class FieldExpr:
     def __init__(self, field: str, op: str, value: Any):
@@ -31,16 +36,19 @@ class FieldExpr:
         self.value = value
 
     def matches(self, record: Dict[str, Any]) -> bool:
-        val = record.get(self.field)
+        val = record[self.field]
         if self.op == "==":
             return val == self.value
         elif self.op == "in":
             return val in self.value
-        elif self.op in {">", ">=", "<", "<="}:
-            try:
-                return eval(f"float(val) {self.op} float(self.value)")
-            except Exception:
-                return False
+        elif self.op == ">":
+            return val > self.value
+        elif self.op == ">=":
+            return val >= self.value
+        elif self.op == "<":
+            return val < self.value
+        elif self.op == "<=":
+            return val <= self.value
         else:
             raise ValueError(f"Unsupported operator: {self.op}")
 
@@ -115,7 +123,7 @@ class SampleFilter:
 
 
 def _filter_fields(record: Dict[str, Any]) -> Dict[str, Any]:
-    return {k: tuple(map(int,v.split(';'))) if k=='fastq_bytes' else 
+    return {k: tuple(map(int,v.split(';'))) if k=='fastq_bytes' and type(v)==str else 
                 (int(v) if k in NUMERIC_FIELDS else
                     v
                 )
@@ -175,7 +183,7 @@ class Sample:
             self.fastqs = uris
         else:
             if self._layout == 'single' and self.library_layout == 'PAIRED':
-                self._uri_option += '@only-r1'
+                self._uri_option += '@only-read1'
             if self._layout == 'paired' and self.library_layout == 'SINGLE':
                 self.fastqs = []
             else:
@@ -200,10 +208,10 @@ class Sample:
     def is_empty(self):
         return len(self.fastqs)==0
 
-def _group_samples(data: List[Dict[str, Any]], group_by: str, download_method: str = '', layout: str='auto') -> Iterator[Sample]:
+def _group_samples(data: List[Dict[str, Any]], group_by: str, download_method: str = '', layout: str='auto') -> List[Sample]:
     groups: Dict[str, List[Dict[str, Any]]] = {}
     for record in data:
-        tag = record.get(group_by)
+        tag = record[group_by]
         if tag:
             groups.setdefault(tag, []).append(record)
     samples: List[Sample] = []
@@ -213,7 +221,7 @@ def _group_samples(data: List[Dict[str, Any]], group_by: str, download_method: s
             samples.append(sample)
     return samples
 
-def ENA(identifier: str, group_by: str, filter: Optional[SampleFilter] = None, use_ftp: bool = False, use_aspera: bool = False, layout: str="auto") -> Iterator[Sample]:
+def ENA(identifier: str, group_by: str, filter: Optional[SampleFilter] = None, use_ftp: bool = False, use_aspera: bool = False, layout: str="auto") -> List[Sample]:
     if group_by not in ALLOWED_FIELDS:
         raise ValueError(f"Invalid group_by field: {group_by}. Must be one of {ALLOWED_FIELDS}")
     url = (
@@ -245,7 +253,7 @@ def ENA(identifier: str, group_by: str, filter: Optional[SampleFilter] = None, u
     return _group_samples(data, group_by, download_method='ena-aspera' if use_aspera else 'ena-ftp' if use_ftp else '', layout=layout)
 
 
-def SRA(identifier: str, group_by: str, filter: Optional[SampleFilter] = None, layout: str="auto") -> Iterator[Sample]:
+def SRA(identifier: str, group_by: str, filter: Optional[SampleFilter] = None, layout: str="auto") -> List[Sample]:
     cmd = [
         "docker", "run", "--rm", "ncbi/edirect",
         "esearch", "-db", "sra", "-query", identifier,
@@ -258,28 +266,28 @@ def SRA(identifier: str, group_by: str, filter: Optional[SampleFilter] = None, l
 
     def normalize_headers(r: Dict[str, str]) -> Dict[str, str]:
         return {
-            "run_accession": r.get("Run"),
-            "experiment_accession": r.get("Experiment"),
-            "sample_accession": r.get("Sample"),
-            "study_accession": r.get("SRAStudy"),
-            "library_name": r.get("LibraryName"),
-            "library_strategy": r.get("LibraryStrategy"),
-            "library_source": r.get("LibrarySource"),
-            "library_selection": r.get("LibrarySelection"),
-            "library_layout": r.get("LibraryLayout"),
-            "insert_size": r.get("InsertSize"),
-            "instrument_platform": r.get("Platform"),
-            "instrument_model": r.get("Model"),
-            "scientific_name": r.get("ScientificName"),
-            "tax_id": r.get("TaxID"),
-            "sample_alias": r.get("SampleName"),
-            "secondary_sample_accession": r.get("BioSample"),
-            "base_count": r.get("bases"),
-            "read_count": r.get("spots"),
-            "nominal_length": r.get("avgLength"),
-            "fastq_bytes": r.get("size_MB")* 1_000_000,  # Convert MB to bytes
-            "first_public": r.get("ReleaseDate"),
-            "last_updated": r.get("LoadDate"),
+            "run_accession": r["Run"],
+            "experiment_accession": r["Experiment"],
+            "sample_accession": r["Sample"],
+            "study_accession": r["SRAStudy"],
+            "library_name": r["LibraryName"],
+            "library_strategy": r["LibraryStrategy"],
+            "library_source": r["LibrarySource"],
+            "library_selection": r["LibrarySelection"],
+            "library_layout": r["LibraryLayout"],
+            "insert_size": r["InsertSize"],
+            "instrument_platform": r["Platform"],
+            "instrument_model": r["Model"],
+            "scientific_name": r["ScientificName"],
+            "tax_id": r["TaxID"],
+            "sample_alias": r["SampleName"],
+            "secondary_sample_accession": r["BioSample"],
+            "base_count": r["bases"],
+            "read_count": r["spots"],
+            "nominal_length": r["avgLength"],
+            "fastq_bytes": int(try_float(r.get("size_MB", "")) * 1_000_000),  # Convert MB to bytes
+            "first_public": r["ReleaseDate"],
+            "last_updated": r["LoadDate"],
         }
 
     data = [_filter_fields(normalize_headers(r)) for r in lines]
@@ -332,7 +340,7 @@ def FASTQ(
     *,
     group_by: str = "folder",             # "folder", "pattern.<name>", or "none"
     layout: Literal["auto", "paired", "single"] = "auto",
-    only_read1: Optional[bool] = None,     # defaults True only when layout=="single"
+    only_read1: Optional[bool] = None,     # auto-applies when layout==‘single’ and sample is detected paired
     strict_pairs: bool = False,
     allow_unknown: bool = True,            # if False, drop unknown when aligning to single
     study_vote: Literal["majority", "all"] = "majority",
@@ -345,12 +353,9 @@ def FASTQ(
     Returns a list of sample dicts with keys:
       - sample_accession, project_accession
       - detected_layout: 'paired' | 'single' | 'unknown'
-      - study_layout: 'paired' | 'single' (when layout='auto')
-      - effective_layout: 'paired' | 'single' (post-alignment)
+      - library_layout: 'paired' | 'single' (post-alignment)
       - reads: { 'R1': [...], 'R2': [...] } when effective_layout == 'paired'
       - fastqs: list[str] (final selection after enforcement)
-      - notes: list[str]
-      - any extra fields requested via `fields`
     """
 
     # Normalize roots to a list for URI.find
@@ -395,7 +400,7 @@ def FASTQ(
         fastq_uris.extend(list(part))
 
     # First pass: classify per-sample (collect tuples)
-    classified_samples: List[Dict[str, any]] = []
+    classified_samples: List[Dict[str, Any]] = []
     paired_count = 0
     nonpaired_count = 0
 
