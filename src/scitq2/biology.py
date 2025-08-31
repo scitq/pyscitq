@@ -114,24 +114,12 @@ class SampleFilter:
         return all(expr.matches(record) for expr in self.expressions)
 
 
-class Sample:
-    def __init__(self, tag: str, fields: Dict[str, Any]):
-        self.tag = tag
-        self.fields = fields
-
-    def __getattr__(self, name):
-        return self.fields.get(name)
-
-    def __repr__(self):
-        return f"<Sample {self.tag}>"
-
-
 def _filter_fields(record: Dict[str, Any]) -> Dict[str, Any]:
     return {k: tuple(map(int,v.split(';'))) if k=='fastq_bytes' else 
                 (int(v) if k in NUMERIC_FIELDS else
                     v
                 )
-            for k, v in record.items() if k in ALLOWED_FIELDS}
+            for k, v in record.items() if k in ALLOWED_FIELDS and v!=''}
 
 
 # Sentinel value for inconsistent fields
@@ -155,16 +143,21 @@ def with_properties(cls):
 
 
 @with_properties
-class SampleGroup:
-    def __init__(self, tag: str, records: List[Dict[str, Any]], download_method: str = '', from_uri: bool = False):
+class Sample:
+    def __init__(self, tag: str, records: List[Dict[str, Any]], download_method: str = '', from_uri: bool = False, layout: str='auto'):
+        """
+        A group of FASTQs representing a sample.
+        """
         self.tag = tag
         self._records = records
         if download_method:
             self._uri_option = '@' + download_method
         else:
             self._uri_option = ''
-        self.from_uri = from_uri
+        self._from_uri = from_uri
+        self._layout = layout
         self._compute_fields()
+
 
     def _compute_fields(self):
         self._fields = {}
@@ -175,17 +168,25 @@ class SampleGroup:
 
         # Prefer directly provided FASTQ URIs if present (URI-based discovery),
         # otherwise fall back to building from run_accession (ENA/SRA sources).
-        if self.from_uri:
+        if self._from_uri:
             uris: List[str] = []
             for r in self._records:
                 uris.extend(r['fastqs'])
             self.fastqs = uris
         else:
-            self.fastqs = [
-                f"run+fastq{self._uri_option}://{r['run_accession']}" if isinstance(r, dict) else f"run+fastq{self._uri_option}://{getattr(r, 'run_accession')}"
-                for r in self._records
-                if (isinstance(r, dict) and ('run_accession' in r)) or (not isinstance(r, dict) and hasattr(r, 'run_accession'))
-            ]
+            if self._layout == 'single' and self.library_layout == 'PAIRED':
+                self._uri_option += '@only-r1'
+            if self._layout == 'paired' and self.library_layout == 'SINGLE':
+                self.fastqs = []
+            else:
+                self.fastqs = [
+                    f"run+fastq{self._uri_option}://{r['run_accession']}" if isinstance(r, dict) else f"run+fastq{self._uri_option}://{getattr(r, 'run_accession')}"
+                    for r in self._records
+                    if (isinstance(r, dict) and ('run_accession' in r)) or (not isinstance(r, dict) and hasattr(r, 'run_accession'))
+                ]
+            
+    def __repr__(self):
+        return f"<Sample {self.tag}>"
 
     def _get_singular(self, name: str):
         values = self._fields.get(name, [])
@@ -196,16 +197,23 @@ class SampleGroup:
     def _get_plural(self, name: str):
         return self._fields.get(name, [])
 
+    def is_empty(self):
+        return len(self.fastqs)==0
 
-def _group_samples(data: List[Dict[str, Any]], group_by: str, download_method: str = '') -> Iterator[SampleGroup]:
+def _group_samples(data: List[Dict[str, Any]], group_by: str, download_method: str = '', layout: str='auto') -> Iterator[Sample]:
     groups: Dict[str, List[Dict[str, Any]]] = {}
     for record in data:
         tag = record.get(group_by)
         if tag:
             groups.setdefault(tag, []).append(record)
-    return [SampleGroup(tag, records, download_method) for tag, records in groups.items()]
+    samples: List[Sample] = []
+    for tag, records in groups.items():
+        sample = Sample(tag, records, download_method, layout=layout)
+        if not sample.is_empty():
+            samples.append(sample)
+    return samples
 
-def ENA(identifier: str, group_by: str, filter: Optional[SampleFilter] = None, use_ftp: bool = False, use_aspera: bool = False) -> Iterator[SampleGroup]:
+def ENA(identifier: str, group_by: str, filter: Optional[SampleFilter] = None, use_ftp: bool = False, use_aspera: bool = False, layout: str="auto") -> Iterator[Sample]:
     if group_by not in ALLOWED_FIELDS:
         raise ValueError(f"Invalid group_by field: {group_by}. Must be one of {ALLOWED_FIELDS}")
     url = (
@@ -234,10 +242,10 @@ def ENA(identifier: str, group_by: str, filter: Optional[SampleFilter] = None, u
     if filter:
         data = [r for r in data if filter.matches(r)]
     
-    return _group_samples(data, group_by, download_method='ena-aspera' if use_aspera else 'ena-ftp' if use_ftp else '')
+    return _group_samples(data, group_by, download_method='ena-aspera' if use_aspera else 'ena-ftp' if use_ftp else '', layout=layout)
 
 
-def SRA(identifier: str, group_by: str, event_name: str, filter: Optional[SampleFilter] = None) -> Iterator[SampleGroup]:
+def SRA(identifier: str, group_by: str, filter: Optional[SampleFilter] = None, layout: str="auto") -> Iterator[Sample]:
     cmd = [
         "docker", "run", "--rm", "ncbi/edirect",
         "esearch", "-db", "sra", "-query", identifier,
@@ -278,7 +286,7 @@ def SRA(identifier: str, group_by: str, event_name: str, filter: Optional[Sample
     if filter:
         data = [r for r in data if filter.matches(r)]
 
-    return _group_samples(data, group_by, download_method='sra-tools')
+    return _group_samples(data, group_by, download_method='sra-tools', layout=layout)
 
 # -----------------------------
 # FASTQ discovery on top of URI
@@ -330,7 +338,7 @@ def FASTQ(
     study_vote: Literal["majority", "all"] = "majority",
     filter: Optional[str] = None,
     pattern: Optional[str] = None,
-) -> List[SampleGroup]:
+) -> List[Sample]:
     """
     High-level FASTQ source on top of URI.find().
 
@@ -422,7 +430,7 @@ def FASTQ(
         study_layout = "single"
 
     # Alignment & selection
-    out: List[SampleGroup] = []
+    out: List[Sample] = []
     for sample in classified_samples:
         if layout == "auto":
             if study_layout == "single":
@@ -461,6 +469,6 @@ def FASTQ(
         sample["library_layout"] = study_layout
         sample["fastqs"] = final_fastqs
 
-        out.append(SampleGroup(sample.get("sample_accession",""), [sample], from_uri=True))
+        out.append(Sample(sample.get("sample_accession",""), [sample], from_uri=True))
 
     return out
