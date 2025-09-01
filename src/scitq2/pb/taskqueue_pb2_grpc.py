@@ -6,7 +6,7 @@ import warnings
 from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2
 from . import taskqueue_pb2 as taskqueue__pb2
 
-GRPC_GENERATED_VERSION = '1.73.0'
+GRPC_GENERATED_VERSION = '1.74.0'
 GRPC_VERSION = grpc.__version__
 _version_not_supported = False
 
@@ -125,6 +125,11 @@ class TaskQueueStub(object):
                 request_serializer=taskqueue__pb2.JobId.SerializeToString,
                 response_deserializer=taskqueue__pb2.Ack.FromString,
                 _registered_method=True)
+        self.UpdateJob = channel.unary_unary(
+                '/taskqueue.TaskQueue/UpdateJob',
+                request_serializer=taskqueue__pb2.JobUpdate.SerializeToString,
+                response_deserializer=taskqueue__pb2.Ack.FromString,
+                _registered_method=True)
         self.ListFlavors = channel.unary_unary(
                 '/taskqueue.TaskQueue/ListFlavors',
                 request_serializer=taskqueue__pb2.ListFlavorsRequest.SerializeToString,
@@ -207,7 +212,7 @@ class TaskQueueStub(object):
                 _registered_method=True)
         self.ListSteps = channel.unary_unary(
                 '/taskqueue.TaskQueue/ListSteps',
-                request_serializer=taskqueue__pb2.WorkflowId.SerializeToString,
+                request_serializer=taskqueue__pb2.StepFilter.SerializeToString,
                 response_deserializer=taskqueue__pb2.StepList.FromString,
                 _registered_method=True)
         self.CreateStep = channel.unary_unary(
@@ -230,6 +235,11 @@ class TaskQueueStub(object):
                 request_serializer=taskqueue__pb2.FetchListRequest.SerializeToString,
                 response_deserializer=taskqueue__pb2.FetchListResponse.FromString,
                 _registered_method=True)
+        self.FetchInfo = channel.unary_unary(
+                '/taskqueue.TaskQueue/FetchInfo',
+                request_serializer=taskqueue__pb2.FetchListRequest.SerializeToString,
+                response_deserializer=taskqueue__pb2.FetchInfoResponse.FromString,
+                _registered_method=True)
         self.UploadTemplate = channel.unary_unary(
                 '/taskqueue.TaskQueue/UploadTemplate',
                 request_serializer=taskqueue__pb2.UploadTemplateRequest.SerializeToString,
@@ -242,7 +252,7 @@ class TaskQueueStub(object):
                 _registered_method=True)
         self.ListTemplates = channel.unary_unary(
                 '/taskqueue.TaskQueue/ListTemplates',
-                request_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
+                request_serializer=taskqueue__pb2.TemplateFilter.SerializeToString,
                 response_deserializer=taskqueue__pb2.TemplateList.FromString,
                 _registered_method=True)
         self.ListTemplateRuns = channel.unary_unary(
@@ -255,10 +265,40 @@ class TaskQueueStub(object):
                 request_serializer=taskqueue__pb2.UpdateTemplateRunRequest.SerializeToString,
                 response_deserializer=taskqueue__pb2.Ack.FromString,
                 _registered_method=True)
+        self.DeleteTemplateRun = channel.unary_unary(
+                '/taskqueue.TaskQueue/DeleteTemplateRun',
+                request_serializer=taskqueue__pb2.DeleteTemplateRunRequest.SerializeToString,
+                response_deserializer=taskqueue__pb2.Ack.FromString,
+                _registered_method=True)
         self.GetWorkspaceRoot = channel.unary_unary(
                 '/taskqueue.TaskQueue/GetWorkspaceRoot',
                 request_serializer=taskqueue__pb2.WorkspaceRootRequest.SerializeToString,
                 response_deserializer=taskqueue__pb2.WorkspaceRootResponse.FromString,
+                _registered_method=True)
+        self.RegisterSpecifications = channel.unary_unary(
+                '/taskqueue.TaskQueue/RegisterSpecifications',
+                request_serializer=taskqueue__pb2.ResourceSpec.SerializeToString,
+                response_deserializer=taskqueue__pb2.Ack.FromString,
+                _registered_method=True)
+        self.ReportWorkerEvent = channel.unary_unary(
+                '/taskqueue.TaskQueue/ReportWorkerEvent',
+                request_serializer=taskqueue__pb2.WorkerEvent.SerializeToString,
+                response_deserializer=taskqueue__pb2.Ack.FromString,
+                _registered_method=True)
+        self.ListWorkerEvents = channel.unary_unary(
+                '/taskqueue.TaskQueue/ListWorkerEvents',
+                request_serializer=taskqueue__pb2.WorkerEventFilter.SerializeToString,
+                response_deserializer=taskqueue__pb2.WorkerEventList.FromString,
+                _registered_method=True)
+        self.DeleteWorkerEvent = channel.unary_unary(
+                '/taskqueue.TaskQueue/DeleteWorkerEvent',
+                request_serializer=taskqueue__pb2.WorkerEventId.SerializeToString,
+                response_deserializer=taskqueue__pb2.Ack.FromString,
+                _registered_method=True)
+        self.PruneWorkerEvents = channel.unary_unary(
+                '/taskqueue.TaskQueue/PruneWorkerEvents',
+                request_serializer=taskqueue__pb2.WorkerEventPruneFilter.SerializeToString,
+                response_deserializer=taskqueue__pb2.WorkerEventPruneResult.FromString,
                 _registered_method=True)
 
 
@@ -368,6 +408,12 @@ class TaskQueueServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def DeleteJob(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def UpdateJob(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -499,6 +545,12 @@ class TaskQueueServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def FetchInfo(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def UploadTemplate(self, request, context):
         """Template system
         """
@@ -530,7 +582,44 @@ class TaskQueueServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def DeleteTemplateRun(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def GetWorkspaceRoot(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def RegisterSpecifications(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ReportWorkerEvent(self, request, context):
+        """Worker events
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ListWorkerEvents(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def DeleteWorkerEvent(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def PruneWorkerEvents(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -629,6 +718,11 @@ def add_TaskQueueServicer_to_server(servicer, server):
                     request_deserializer=taskqueue__pb2.JobId.FromString,
                     response_serializer=taskqueue__pb2.Ack.SerializeToString,
             ),
+            'UpdateJob': grpc.unary_unary_rpc_method_handler(
+                    servicer.UpdateJob,
+                    request_deserializer=taskqueue__pb2.JobUpdate.FromString,
+                    response_serializer=taskqueue__pb2.Ack.SerializeToString,
+            ),
             'ListFlavors': grpc.unary_unary_rpc_method_handler(
                     servicer.ListFlavors,
                     request_deserializer=taskqueue__pb2.ListFlavorsRequest.FromString,
@@ -711,7 +805,7 @@ def add_TaskQueueServicer_to_server(servicer, server):
             ),
             'ListSteps': grpc.unary_unary_rpc_method_handler(
                     servicer.ListSteps,
-                    request_deserializer=taskqueue__pb2.WorkflowId.FromString,
+                    request_deserializer=taskqueue__pb2.StepFilter.FromString,
                     response_serializer=taskqueue__pb2.StepList.SerializeToString,
             ),
             'CreateStep': grpc.unary_unary_rpc_method_handler(
@@ -734,6 +828,11 @@ def add_TaskQueueServicer_to_server(servicer, server):
                     request_deserializer=taskqueue__pb2.FetchListRequest.FromString,
                     response_serializer=taskqueue__pb2.FetchListResponse.SerializeToString,
             ),
+            'FetchInfo': grpc.unary_unary_rpc_method_handler(
+                    servicer.FetchInfo,
+                    request_deserializer=taskqueue__pb2.FetchListRequest.FromString,
+                    response_serializer=taskqueue__pb2.FetchInfoResponse.SerializeToString,
+            ),
             'UploadTemplate': grpc.unary_unary_rpc_method_handler(
                     servicer.UploadTemplate,
                     request_deserializer=taskqueue__pb2.UploadTemplateRequest.FromString,
@@ -746,7 +845,7 @@ def add_TaskQueueServicer_to_server(servicer, server):
             ),
             'ListTemplates': grpc.unary_unary_rpc_method_handler(
                     servicer.ListTemplates,
-                    request_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
+                    request_deserializer=taskqueue__pb2.TemplateFilter.FromString,
                     response_serializer=taskqueue__pb2.TemplateList.SerializeToString,
             ),
             'ListTemplateRuns': grpc.unary_unary_rpc_method_handler(
@@ -759,10 +858,40 @@ def add_TaskQueueServicer_to_server(servicer, server):
                     request_deserializer=taskqueue__pb2.UpdateTemplateRunRequest.FromString,
                     response_serializer=taskqueue__pb2.Ack.SerializeToString,
             ),
+            'DeleteTemplateRun': grpc.unary_unary_rpc_method_handler(
+                    servicer.DeleteTemplateRun,
+                    request_deserializer=taskqueue__pb2.DeleteTemplateRunRequest.FromString,
+                    response_serializer=taskqueue__pb2.Ack.SerializeToString,
+            ),
             'GetWorkspaceRoot': grpc.unary_unary_rpc_method_handler(
                     servicer.GetWorkspaceRoot,
                     request_deserializer=taskqueue__pb2.WorkspaceRootRequest.FromString,
                     response_serializer=taskqueue__pb2.WorkspaceRootResponse.SerializeToString,
+            ),
+            'RegisterSpecifications': grpc.unary_unary_rpc_method_handler(
+                    servicer.RegisterSpecifications,
+                    request_deserializer=taskqueue__pb2.ResourceSpec.FromString,
+                    response_serializer=taskqueue__pb2.Ack.SerializeToString,
+            ),
+            'ReportWorkerEvent': grpc.unary_unary_rpc_method_handler(
+                    servicer.ReportWorkerEvent,
+                    request_deserializer=taskqueue__pb2.WorkerEvent.FromString,
+                    response_serializer=taskqueue__pb2.Ack.SerializeToString,
+            ),
+            'ListWorkerEvents': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListWorkerEvents,
+                    request_deserializer=taskqueue__pb2.WorkerEventFilter.FromString,
+                    response_serializer=taskqueue__pb2.WorkerEventList.SerializeToString,
+            ),
+            'DeleteWorkerEvent': grpc.unary_unary_rpc_method_handler(
+                    servicer.DeleteWorkerEvent,
+                    request_deserializer=taskqueue__pb2.WorkerEventId.FromString,
+                    response_serializer=taskqueue__pb2.Ack.SerializeToString,
+            ),
+            'PruneWorkerEvents': grpc.unary_unary_rpc_method_handler(
+                    servicer.PruneWorkerEvents,
+                    request_deserializer=taskqueue__pb2.WorkerEventPruneFilter.FromString,
+                    response_serializer=taskqueue__pb2.WorkerEventPruneResult.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -1262,6 +1391,33 @@ class TaskQueue(object):
             _registered_method=True)
 
     @staticmethod
+    def UpdateJob(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/taskqueue.TaskQueue/UpdateJob',
+            taskqueue__pb2.JobUpdate.SerializeToString,
+            taskqueue__pb2.Ack.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
     def ListFlavors(request,
             target,
             options=(),
@@ -1708,7 +1864,7 @@ class TaskQueue(object):
             request,
             target,
             '/taskqueue.TaskQueue/ListSteps',
-            taskqueue__pb2.WorkflowId.SerializeToString,
+            taskqueue__pb2.StepFilter.SerializeToString,
             taskqueue__pb2.StepList.FromString,
             options,
             channel_credentials,
@@ -1829,6 +1985,33 @@ class TaskQueue(object):
             _registered_method=True)
 
     @staticmethod
+    def FetchInfo(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/taskqueue.TaskQueue/FetchInfo',
+            taskqueue__pb2.FetchListRequest.SerializeToString,
+            taskqueue__pb2.FetchInfoResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
     def UploadTemplate(request,
             target,
             options=(),
@@ -1897,7 +2080,7 @@ class TaskQueue(object):
             request,
             target,
             '/taskqueue.TaskQueue/ListTemplates',
-            google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
+            taskqueue__pb2.TemplateFilter.SerializeToString,
             taskqueue__pb2.TemplateList.FromString,
             options,
             channel_credentials,
@@ -1964,6 +2147,33 @@ class TaskQueue(object):
             _registered_method=True)
 
     @staticmethod
+    def DeleteTemplateRun(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/taskqueue.TaskQueue/DeleteTemplateRun',
+            taskqueue__pb2.DeleteTemplateRunRequest.SerializeToString,
+            taskqueue__pb2.Ack.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
     def GetWorkspaceRoot(request,
             target,
             options=(),
@@ -1980,6 +2190,141 @@ class TaskQueue(object):
             '/taskqueue.TaskQueue/GetWorkspaceRoot',
             taskqueue__pb2.WorkspaceRootRequest.SerializeToString,
             taskqueue__pb2.WorkspaceRootResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def RegisterSpecifications(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/taskqueue.TaskQueue/RegisterSpecifications',
+            taskqueue__pb2.ResourceSpec.SerializeToString,
+            taskqueue__pb2.Ack.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ReportWorkerEvent(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/taskqueue.TaskQueue/ReportWorkerEvent',
+            taskqueue__pb2.WorkerEvent.SerializeToString,
+            taskqueue__pb2.Ack.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListWorkerEvents(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/taskqueue.TaskQueue/ListWorkerEvents',
+            taskqueue__pb2.WorkerEventFilter.SerializeToString,
+            taskqueue__pb2.WorkerEventList.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def DeleteWorkerEvent(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/taskqueue.TaskQueue/DeleteWorkerEvent',
+            taskqueue__pb2.WorkerEventId.SerializeToString,
+            taskqueue__pb2.Ack.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def PruneWorkerEvents(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/taskqueue.TaskQueue/PruneWorkerEvents',
+            taskqueue__pb2.WorkerEventPruneFilter.SerializeToString,
+            taskqueue__pb2.WorkerEventPruneResult.FromString,
             options,
             channel_credentials,
             insecure,

@@ -5,7 +5,7 @@ from .param import Param, ParamSpec
 from .recruit import WorkerPool, W
 from .util import cond
 from .language import Shell, Raw
-from .uri import Resource, URI
+from .uri import Resource, URI, check_if_file
 from .runner import run
 
 __all__ = [
@@ -19,5 +19,6 @@ __all__ = [
     "Outputs",
     "cond",
     "URI",
+    "check_if_file",
     "run",
 ]

@@ -221,6 +221,18 @@ class Scitq2Client:
         response = self.stub.FetchList(request)
         return response.files
 
+    def fetch_info(self, uri: str) -> taskqueue_pb2.FetchInfoResponse:
+        """
+        Fetches a the info for a given cloud object.
+        Parameters:
+        - uri (str): The URI of the cloud object.
+        Returns:
+        - FetchInfoResponse object (uri, filename, size, is_file, is_dir)
+        """
+        request = taskqueue_pb2.FetchListRequest(uri=uri)
+        response = self.stub.FetchInfo(request)
+        return response
+
     def update_template_run(self, template_run_id: int, workflow_id: Optional[int] = None, error_message: Optional[str] = None):
         """
         Updates the status of a workflow template run. Can be used to attach a workflow_id

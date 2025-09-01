@@ -3,6 +3,7 @@ from pathlib import PurePosixPath
 from typing import Dict, List, Optional, Union, Iterator
 from scitq2.grpc_client import Scitq2Client
 from urllib.parse import urlparse
+import grpc._channel
 
 class Resource:
     """A resource to be used in a workflow step.
@@ -170,3 +171,22 @@ class URI:
             result.append(URIObject(sample_fields))
 
         return result
+
+class CheckFileError(RuntimeError):
+    pass
+
+def check_if_file(*uri: str):
+    """Check if all the URI provided points to a file"""
+    client = Scitq2Client()
+    for u in uri:
+        try:
+            info = client.fetch_info(u)
+        except grpc._channel._InactiveRpcError as e:
+            if 'object not found' in e.details():
+                raise CheckFileError(f"URI {u} object not found")
+            else:
+                raise CheckFileError(f"URI {u} could not be checked : {e.details()}")
+        if info.is_file:
+            continue
+        else:
+            raise CheckFileError(f"URI {u} is not a file")
