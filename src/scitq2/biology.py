@@ -6,6 +6,7 @@ from typing import Any, Dict, Iterator, List, Optional, Iterable, Literal
 import re
 from .uri import URI, URIObject
 import sys
+import fnmatch
 
 
 
@@ -477,3 +478,58 @@ def FASTQ(
         out.append(Sample(sample.get("sample_accession",""), [sample], from_uri=True))
 
     return out
+
+#def find_pairs(sample: Sample):
+#    """Add reads1, reads2 and extras to a supposed paired sample"""
+#    for sep in ['_','.','r','R','']:
+#        reads = {1:[], 2:[], 'extra':[]}
+#        count = {1:0, 2:0}
+#        for fq in sample.fastqs:
+#            for pair in [1,2]:
+#                if fnmatch.fnmatch(fq, f'*{sep}{pair}.f*q.gz'):
+#                    reads[pair].append(fq)
+#                    count[pair] += 1
+#            if fq not in reads[1] and fq not in reads[2]:
+#                reads['extra'].append(fq)
+#        if count[1]>0 and count[1]==count[2]:
+#            sample.reads1 = reads[1]
+#            sample.reads2 = reads[2]
+#            sample.extra = reads['extra']
+#        break
+#    else:
+#        raise RuntimeError(f'Could not find suitable pairs for sample with FASTQ {sample.fastqs}')
+    
+def remote_find_pairs(filter = '*.f*q.gz', prepend = ''):
+    """Create and apply a function that parse files in remote shell and find pairs
+    READS1 contains space separated files matching read1 pattern
+    READS2 contains space separated files matching read2 pattern
+    EXTRA contains other files, space separated
+    
+    prepend is added at the begining of the filter to make it easy to look into a specific folder, prepend='/input/' looks into /input"""
+    if prepend:
+        filter = prepend+filter
+    return """split_fastqs() {
+  # do not assume arrays; keep it POSIX
+  for sep in _ . r R ""; do
+    r1=""; r2=""; extra=""
+    c1=0;  c2=0
+    for fq do
+      case "$fq" in
+        *${sep}1.f*q.gz) r1="${r1}${r1:+ }$fq"; c1=$((c1+1));;
+        *${sep}2.f*q.gz) r2="${r2}${r2:+ }$fq"; c2=$((c2+1));;
+        *)                extra="${extra}${extra:+ }$fq";;
+      esac
+    done
+    if [ "$c1" -gt 0 ] && [ "$c1" -eq "$c2" ]; then
+      READS1=$r1
+      READS2=$r2
+      EXTRA=$extra
+      return 0
+    fi
+    # else: try next separator
+  done
+  return 1
+}
+
+split_fastqs %s
+""" % filter
