@@ -114,6 +114,8 @@ class WorkerPool:
         self.match = set(match)
         self.extra_options = {}
         if max_recruited is not None:
+            if max_recruited == 0:
+                raise RuntimeError("Setting up a worker pool that is empty by construction is not allowed.")
             self.extra_options["max_recruited"]=max_recruited
         self.extra_options["rounds"]=task_batches
         self.extra_options["timeout"]=timeout

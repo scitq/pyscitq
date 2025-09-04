@@ -7,6 +7,7 @@ from scitq2.constants import DEFAULT_TASK_STATUS, ACTIONS
 import os
 import sys
 from collections.abc import Iterable
+from abc import ABC, abstractmethod
 
 class Outputs:
     """Represents the declarative outputs of a Step, which can be used in other Steps.
@@ -20,7 +21,74 @@ class Outputs:
             if not isinstance(publish, str):
                 raise ValueError("publish must be a string (for now)")
 
-class Output:
+
+class OutputBase(ABC):
+    @abstractmethod
+    def resolve_path(self) -> Union[str, List[str]]: ...
+    @abstractmethod
+    def resolve_task_id(self) -> List[int]: ...
+
+    def __add__(self, other: Union["OutputBase", List[str]]) -> "CompositeOutput":
+        return CompositeOutput.from_parts(self, other)
+    def __radd__(self, other: Union["OutputBase", List[str], int]) -> "CompositeOutput":
+        # allow sum([o1, o2], 0) usage
+        if other == 0:
+            return CompositeOutput.from_parts(self)
+        return CompositeOutput.from_parts(other, self)
+
+class CompositeOutput(OutputBase):
+    def __init__(self, parts: List[Union[OutputBase, Iterable[str]]]):
+        self.parts = self._normalize(parts)
+
+    @classmethod
+    def from_parts(cls, *parts: Union[OutputBase, Iterable[str]]):
+        return cls(list(parts))
+
+    def _normalize(self, parts):
+        norm: List[Union[OutputBase, List[str]]] = []
+        for p in parts:
+            if isinstance(p, CompositeOutput):
+                norm.extend(p.parts)
+            elif isinstance(p, OutputBase):
+                norm.append(p)
+            elif isinstance(p, Iterable) and not isinstance(p, (str, bytes)):
+                seq = list(p)
+                if all(isinstance(x, str) for x in seq):
+                    norm.append(seq)
+                else:
+                    raise TypeError("CompositeOutput parts iterable must yield only strings")
+            else:
+                raise TypeError(f"Unsupported part for CompositeOutput: {type(p)}")
+        return norm
+
+    def resolve_path(self) -> List[str]:
+        paths: List[str] = []
+        for p in self.parts:
+            if isinstance(p, OutputBase):
+                rp = p.resolve_path()
+                if isinstance(rp, list):
+                    paths.extend([x for x in rp if x is not None])
+                elif rp is not None:
+                    paths.append(rp)
+            else:  # list[str]
+                paths.extend(p)
+        return paths
+
+    def resolve_task_id(self) -> List[int]:
+        ids: List[int] = []
+        for p in self.parts:
+            if isinstance(p, OutputBase):
+                ids.extend(p.resolve_task_id())
+        # preserve order, remove dupes
+        seen = set()
+        unique = []
+        for i in ids:
+            if i not in seen:
+                seen.add(i)
+                unique.append(i)
+        return unique
+
+class Output(OutputBase):
     """Represents a single output of a task, which can be used in other tasks at runtime."""
     def __init__(self, task: "Task", grouped: bool = False, globs: Optional[str]=None,
                  action: Optional[str] = "", move: Optional[str] = None):
@@ -94,7 +162,7 @@ class GroupedStep:
 class Task:
     def __init__(self, tag: str, command: str, container: str, 
                  step: "Step",
-                 inputs: Optional[Union[str, Output, List[str], List[Output]]] = None,
+                 inputs: Optional[Union[str, OutputBase, List[str], List[OutputBase]]] = None,
                  resources: Optional[List[Resource]] = None, 
                  language: Optional[Language] = None,
                  depends: Optional[Union[List["Task"],"GroupedStep"]] = None,
@@ -111,7 +179,7 @@ class Task:
             self.inputs = []
         elif isinstance(inputs, list):
             self.inputs = inputs
-        elif isinstance(inputs, (str, Output)):
+        elif isinstance(inputs, (str, OutputBase)):
             self.inputs = [inputs]
         else:
             raise ValueError(f"Invalid type for inputs: {type(inputs)}. Expected str, Output, or list of these.")
@@ -125,12 +193,21 @@ class Task:
         resolved_command = self.language.compile_command(self.command)
         resolved_shell = self.language.executable()
 
+        # Normalize inputs so we can accept a single OutputBase/str or an iterable of them
+        if isinstance(self.inputs, (OutputBase, str)) or isinstance(self.inputs, (bytes, bytearray)):
+            input_items = [self.inputs]
+        elif isinstance(self.inputs, Iterable):
+            input_items = list(self.inputs)
+        else:
+            # Fallback: treat as a single item
+            input_items = [self.inputs]
+
         # Resolve dependencies
         resolved_depends = set()
         if self.depends is None and self.inputs:
             # Step 1: if no explicit dependencies, infer from inputs
-            for input_item in self.inputs:
-                if isinstance(input_item, Output):
+            for input_item in input_items:
+                if isinstance(input_item, OutputBase):
                     for task_id in input_item.resolve_task_id():
                         resolved_depends.add(task_id)
         elif self.depends is not None:
@@ -151,13 +228,13 @@ class Task:
 
         # Resolve inputs to Output objects
         resolved_inputs = []
-        for input_item in self.inputs:
-            if isinstance(input_item, Output):
-                # If it's an Output, resolve its path
+        for input_item in input_items:
+            if isinstance(input_item, OutputBase):
+                # If it's an Output-like, resolve its path and drop None entries
                 resolved_path = input_item.resolve_path()
                 if isinstance(resolved_path, list):
-                    resolved_inputs.extend(resolved_path)
-                else:
+                    resolved_inputs.extend([p for p in resolved_path if p is not None])
+                elif resolved_path is not None:
                     resolved_inputs.append(resolved_path)
             elif isinstance(input_item, str):
                 # If it's a string, treat it as a file path
@@ -166,6 +243,8 @@ class Task:
                 raise ValueError(f"Invalid input type: {type(input_item)}. Expected str or Output.")
         
         resolved_output = Output(task=self, grouped=False).resolve_path()
+        if resolved_output is None:
+            raise ValueError(f"Task {self.full_name} output path could not be resolved (no publish and no workspace_root).")
 
         # Resolve resources
         resolved_resources = list(map(str, self.resources))
@@ -204,11 +283,11 @@ class TaskSpec:
 
     def __eq__(self, other):
         return isinstance(other, TaskSpec) and (
-            self.cpu, self.mem, self.prefetch
-        ) == (other.cpu, other.mem, other.prefetch)
+            self.cpu, self.mem, self.concurrency, self.prefetch
+        ) == (other.cpu, other.mem, other.concurrency, other.prefetch)
     
     def __str__(self):
-        return f"TaskSpec(cpu={self.cpu}, mem={self.mem}, conurrency={self.concurrency}, prefetch={self.prefetch})"
+        return f"TaskSpec(cpu={self.cpu}, mem={self.mem}, concurrency={self.concurrency}, prefetch={self.prefetch})"
 
 
 def underscore_join(*args: str) -> str:
@@ -243,7 +322,7 @@ class Step:
         command: str,
         container: str,
         outputs: Optional[Outputs] = None,
-        inputs: Optional[Union[str, Output, List[str], List[Output]]] = None,
+        inputs: Optional[Union[str, OutputBase, List[str], List[OutputBase]]] = None,
         resources: Optional[Union[Resource, List[Resource]]] = None,
         language: Optional[Language] = None,
         depends: Optional[Union["Step",List["Step"]]] = None,
@@ -343,7 +422,7 @@ class Workflow:
         command: str,
         container: str,
         tag: Optional[str] = None,
-        inputs: Optional[Union[str, Output, List[str], List[Output]]] = None,
+        inputs: Optional[Union[str, OutputBase, List[str], List[OutputBase]]] = None,
         outputs: Optional[Outputs] = None,
         resources: Optional[Union[Resource, List[Resource]]] = None,
         language: Optional[Language] = None,

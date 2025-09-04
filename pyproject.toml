@@ -1,14 +1,14 @@
 [project]
 name = "pyscitq2"
-version = "0.1.3"
+version = "0.2.1"
 description = "Python DSL for defining scitq2 workflows"
 authors = [{ name="Raynald de Lahondès" }]
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.8"
 dependencies = [
-    "grpcio>=1.63.0",
-    "grpcio-tools>=1.63.0"
+    "grpcio>=1.74.0",
+    "grpcio-tools>=1.74.0"
 ]
 
 [project.urls]
