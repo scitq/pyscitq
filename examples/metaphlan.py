@@ -19,7 +19,7 @@ def MetaPhlAnWorkflow(params: Params):
         description="Workflow for running MetaPhlAn4 on WGS data from ENA or SRA.",
         version="1.0.0",
         tag=f"{params.identifier}-{params.depth}",
-        language=Shell("bash", options=(Shell.PIPEFAIL, Shell.HELPERS, Shell.ERREXIT)),
+        language=Shell("bash"),
         worker_pool=WorkerPool(
             W.cpu == 32,
             W.mem >= 120,
@@ -62,6 +62,7 @@ def MetaPhlAnWorkflow(params: Params):
             command=cond(
                 (sample.library_layout == "PAIRED",
                     fr"""
+                    . /builtin/std.sh
                     _para zcat /input/*1.f*q.gz > /tmp/read1.fastq
                     _para zcat /input/*2.f*q.gz > /tmp/read2.fastq
                     _wait
@@ -76,6 +77,7 @@ def MetaPhlAnWorkflow(params: Params):
                     """),
                 default= 
                     fr"""
+                    . /builtin/std.sh
                     zcat /input/*.f*q.gz | fastp \
                     --adapter_sequence AGATCGGAAGAGCACACGTCTGAACTCCAGTCA \
                     --cut_front --cut_tail --n_base_limit 0 --length_required 60 \
@@ -97,6 +99,7 @@ def MetaPhlAnWorkflow(params: Params):
             command=cond(
                 (sample.library_layout == "PAIRED",
                     fr"""
+                    . /builtin/std.sh
                     bowtie2 -p $CPU --mm -x /resource/chm13v2.0/chm13v2.0 \
                     -1 /input/{sample.sample_accession}.1.fastq.gz \
                     -2 /input/{sample.sample_accession}.2.fastq.gz --reorder \
@@ -113,6 +116,7 @@ def MetaPhlAnWorkflow(params: Params):
                     """),
                 default= 
                     fr"""
+                    . /builtin/std.sh
                     bowtie2 -p ${{CPU}} --mm -x /resource/chm13v2.0/chm13v2.0 \
                     -U /input/{sample.sample_accession}.fastq.gz --reorder \
                     2> /output/{sample.sample_accession}.bowtie2.log \
@@ -134,12 +138,14 @@ def MetaPhlAnWorkflow(params: Params):
                 command=cond(
                     (sample.library_layout == "PAIRED",
                         fr"""
+                        . /builtin/std.sh
                         _para seqtk sample -s42 /input/{sample.sample_accession}.1.fastq.gz {params.depth} | pigz > /output/{sample.sample_accession}.1.fastq.gz
                         _para seqtk sample -s42 /input/{sample.sample_accession}.2.fastq.gz {params.depth} | pigz > /output/{sample.sample_accession}.2.fastq.gz
                         _wait
                         """),
                     default= 
                         fr"""
+                        . /builtin/std.sh
                         seqtk sample -s42 /input/{sample.sample_accession}.fastq.gz {params.depth} | pigz > /output/{sample.sample_accession}.fastq.gz
                         """
                 ),
@@ -197,6 +203,7 @@ def MetaPhlAnWorkflow(params: Params):
         inputs=[humanfilter.output("logs",grouped=True,move="humanfilter"), 
                 metaphlan.output("logs",grouped=True,move="metaphlan")],
         command=fr"""
+        . /builtin/std.sh
         cd /input
         catalog=human
         for bowtielog in humanfilter/*; do

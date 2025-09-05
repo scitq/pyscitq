@@ -10,7 +10,7 @@ def helloworld(params: Params):
         description="Minimal workflow example",
         version="1.0.0",
         tag=f"{params.name}",
-        language=Shell("sh", options=(Shell.HELPERS, Shell.ERREXIT)),
+        language=Shell("sh"),
         worker_pool=WorkerPool(W.provider=="local.local", W.region=="local")
     )
 

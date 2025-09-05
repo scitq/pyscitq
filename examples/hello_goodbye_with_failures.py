@@ -14,7 +14,7 @@ def hellogoodbye(params: Params):
         description="Mini workflow example, with parallel steps, dependencies and failures",
         version="1.0.0",
         tag=f"{params.name}",
-        language=Shell("sh", options=(Shell.ERREXIT)),
+        language=Shell("sh"),
         worker_pool=WorkerPool(W.provider=="local.local", W.region=="local")
     )
 

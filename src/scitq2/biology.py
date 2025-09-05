@@ -23,6 +23,11 @@ NUMERIC_FIELDS = {
     "insert_size", "tax_id", "read_count", "base_count", "nominal_length", "fastq_bytes" 
 }
 
+SINGLE="SINGLE"
+PAIRED="PAIRED"
+UNKNOWN="UNKNOWN"
+AUTO="AUTO"
+
 
 def try_float(s):
     try:
@@ -153,7 +158,7 @@ def with_properties(cls):
 
 @with_properties
 class Sample:
-    def __init__(self, tag: str, records: List[Dict[str, Any]], download_method: str = '', from_uri: bool = False, layout: str='auto'):
+    def __init__(self, tag: str, records: List[Dict[str, Any]], download_method: str = '', from_uri: bool = False, layout: str=AUTO):
         """
         A group of FASTQs representing a sample.
         """
@@ -183,9 +188,9 @@ class Sample:
                 uris.extend(r['fastqs'])
             self.fastqs = uris
         else:
-            if self._layout == 'single' and self.library_layout == 'PAIRED':
+            if self._layout == SINGLE and self.library_layout == PAIRED:
                 self._uri_option += '@only-read1'
-            if self._layout == 'paired' and self.library_layout == 'SINGLE':
+            if self._layout == PAIRED and self.library_layout == SINGLE:
                 self.fastqs = []
             else:
                 self.fastqs = [
@@ -209,7 +214,7 @@ class Sample:
     def is_empty(self):
         return len(self.fastqs)==0
 
-def _group_samples(data: List[Dict[str, Any]], group_by: str, download_method: str = '', layout: str='auto') -> List[Sample]:
+def _group_samples(data: List[Dict[str, Any]], group_by: str, download_method: str = '', layout: str=AUTO) -> List[Sample]:
     groups: Dict[str, List[Dict[str, Any]]] = {}
     for record in data:
         tag = record[group_by]
@@ -222,7 +227,7 @@ def _group_samples(data: List[Dict[str, Any]], group_by: str, download_method: s
             samples.append(sample)
     return samples
 
-def ENA(identifier: str, group_by: str, filter: Optional[SampleFilter] = None, use_ftp: bool = False, use_aspera: bool = False, layout: str="auto") -> List[Sample]:
+def ENA(identifier: str, group_by: str, filter: Optional[SampleFilter] = None, use_ftp: bool = False, use_aspera: bool = False, layout: str=AUTO) -> List[Sample]:
     if group_by not in ALLOWED_FIELDS:
         raise ValueError(f"Invalid group_by field: {group_by}. Must be one of {ALLOWED_FIELDS}")
     url = (
@@ -254,7 +259,7 @@ def ENA(identifier: str, group_by: str, filter: Optional[SampleFilter] = None, u
     return _group_samples(data, group_by, download_method='ena-aspera' if use_aspera else 'ena-ftp' if use_ftp else '', layout=layout)
 
 
-def SRA(identifier: str, group_by: str, filter: Optional[SampleFilter] = None, layout: str="auto") -> List[Sample]:
+def SRA(identifier: str, group_by: str, filter: Optional[SampleFilter] = None, layout: str=AUTO) -> List[Sample]:
     cmd = [
         "docker", "run", "--rm", "ncbi/edirect",
         "esearch", "-db", "sra", "-query", identifier,
@@ -305,7 +310,7 @@ _READ_REGEX = re.compile(r".*(1|2)\.f.*q(\.gz)?$", re.IGNORECASE)
 
 
 def find_sample_parity(fastqs: List[str]) -> Dict[str, Any]:
-    """classify a sample as paired/single/unknown based on FASTQ names"""
+    """classify a sample as PAIRED/SINGLE/UNKNOWN based on FASTQ names"""
     r1_list: List[str] = []
     r2_list: List[str] = []
     extras: List[str] = []
@@ -322,11 +327,11 @@ def find_sample_parity(fastqs: List[str]) -> Dict[str, Any]:
             extras.append(fq)
     nR1, nR2 = len(r1_list), len(r2_list)
     if nR1 == nR2 and nR1 > 0:
-        detected = "paired"
+        detected = PAIRED
     elif (nR1 == 0 and nR2 == 0) or (nR1 > 0 and nR2 == 0) or (nR2 > 0 and nR1 == 0):
-        detected = "single"
+        detected = SINGLE
     else:
-        detected = "unknown"  # nR1>0, nR2>0, nR1!=nR2
+        detected = UNKNOWN  # nR1>0, nR2>0, nR1!=nR2
     return {
         "detected": detected,
         "R1": r1_list,
@@ -340,10 +345,10 @@ def FASTQ(
     roots: Iterable[str] | str,
     *,
     group_by: str = "folder",             # "folder", "pattern.<name>", or "none"
-    layout: Literal["auto", "paired", "single"] = "auto",
-    only_read1: Optional[bool] = None,     # auto-applies when layout==‘single’ and sample is detected paired
+    layout: Literal["AUTO", "PAIRED", "SINGLE"] = AUTO,
+    only_read1: Optional[bool] = None,     # auto-applies when layout==‘single’ and sample is detected PAIRED
     strict_pairs: bool = False,
-    allow_unknown: bool = True,            # if False, drop unknown when aligning to single
+    allow_unknown: bool = True,            # if False, drop UNKNOWN when aligning to SINGLE
     study_vote: Literal["majority", "all"] = "majority",
     filter: Optional[str] = None,
     pattern: Optional[str] = None,
@@ -353,9 +358,9 @@ def FASTQ(
 
     Returns a list of sample dicts with keys:
       - sample_accession, project_accession
-      - detected_layout: 'paired' | 'single' | 'unknown'
-      - library_layout: 'paired' | 'single' (post-alignment)
-      - reads: { 'R1': [...], 'R2': [...] } when effective_layout == 'paired'
+      - detected_layout: 'PAIRED' | 'SINGLE' | 'UNKNOWN'
+      - library_layout: 'PAIRED' | 'SINGLE' (post-alignment)
+      - reads: { 'R1': [...], 'R2': [...] } when effective_layout == 'PAIRED'
       - fastqs: list[str] (final selection after enforcement)
     """
 
@@ -409,7 +414,7 @@ def FASTQ(
         fastqs = list(uri.fastqs or [])
         sample_fastqs = find_sample_parity(fastqs)
         detected_layout = sample_fastqs["detected"]
-        if detected_layout == "paired":
+        if detected_layout == "PAIRED":
             paired_count += 1
         else:
             nonpaired_count += 1
@@ -425,51 +430,51 @@ def FASTQ(
         classified_samples.append(sample)
 
     # Decide study vote if needed
-    if layout == "auto":
+    if layout == AUTO:
         if study_vote == "all":
-            study_layout = "paired" if (paired_count > 0 and nonpaired_count == 0) else "single"
+            study_layout = PAIRED if (paired_count > 0 and nonpaired_count == 0) else SINGLE
         else:  # majority
-            study_layout = "paired" if paired_count >= nonpaired_count else "single"
-    elif layout == "paired":
-        study_layout = "paired"
+            study_layout = PAIRED if paired_count >= nonpaired_count else SINGLE
+    elif layout == PAIRED:
+        study_layout = PAIRED
     else:
-        study_layout = "single"
+        study_layout = SINGLE
 
     # Alignment & selection
     out: List[Sample] = []
     for sample in classified_samples:
-        if layout == "auto":
-            if study_layout == "single":
-                sample['effective_layout'] = "single"
+        if layout == AUTO:
+            if study_layout == SINGLE:
+                sample['effective_layout'] = SINGLE
                 final_fastqs = sample['fastqs']  # keep as-is
-            else:  # paired study
-                if sample['detected_layout'] == "paired":
-                    sample['effective_layout'] = "paired"
+            else:  # PAIRED study
+                if sample['detected_layout'] == PAIRED:
+                    sample['effective_layout'] = PAIRED
                     final_fastqs = (sample["R1"] + sample["R2"]) if strict_pairs else \
                         (sample["R1"] + sample["R2"] + sample["extras"])
                     #if strict_pairs and extras:
                     #    notes.append("excluded extras (strict_pairs)")
                 else:
-                    sample['effective_layout'] = "single"
+                    sample['effective_layout'] = SINGLE
                     final_fastqs = sample['fastqs']
-        elif layout == "paired":
-            if sample["detected_layout"] != "paired":
+        elif layout == PAIRED:
+            if sample["detected_layout"] != PAIRED:
                 # one day print or log a warning
                 continue
             else:
-                sample['effective_layout'] = "paired"
+                sample['effective_layout'] = PAIRED
                 final_fastqs = (sample["R1"] + sample["R2"]) if strict_pairs else \
                         (sample["R1"] + sample["R2"] + sample["extras"])
                 #if strict_pairs and extras:
                 #    notes.append("excluded extras (strict_pairs)")
-        else:  # layout == "single"
-            sample['effective_layout'] = "single"
-            if sample["detected_layout"] == "paired":
+        else:  # layout == SINGLE
+            sample['effective_layout'] = SINGLE
+            if sample["detected_layout"] == PAIRED:
                 if (only_read1 or only_read1 is None)  and sample["R1"]:
                     final_fastqs = sample["R1"]
                 else:
                     continue
-            elif sample["detected_layout"] == "single" or allow_unknown:
+            elif sample["detected_layout"] == SINGLE or allow_unknown:
                 final_fastqs = sample["fastqs"]
 
         sample["library_layout"] = study_layout
@@ -478,58 +483,3 @@ def FASTQ(
         out.append(Sample(sample.get("sample_accession",""), [sample], from_uri=True))
 
     return out
-
-#def find_pairs(sample: Sample):
-#    """Add reads1, reads2 and extras to a supposed paired sample"""
-#    for sep in ['_','.','r','R','']:
-#        reads = {1:[], 2:[], 'extra':[]}
-#        count = {1:0, 2:0}
-#        for fq in sample.fastqs:
-#            for pair in [1,2]:
-#                if fnmatch.fnmatch(fq, f'*{sep}{pair}.f*q.gz'):
-#                    reads[pair].append(fq)
-#                    count[pair] += 1
-#            if fq not in reads[1] and fq not in reads[2]:
-#                reads['extra'].append(fq)
-#        if count[1]>0 and count[1]==count[2]:
-#            sample.reads1 = reads[1]
-#            sample.reads2 = reads[2]
-#            sample.extra = reads['extra']
-#        break
-#    else:
-#        raise RuntimeError(f'Could not find suitable pairs for sample with FASTQ {sample.fastqs}')
-    
-def remote_find_pairs(filter = '*.f*q.gz', prepend = ''):
-    """Create and apply a function that parse files in remote shell and find pairs
-    READS1 contains space separated files matching read1 pattern
-    READS2 contains space separated files matching read2 pattern
-    EXTRA contains other files, space separated
-    
-    prepend is added at the begining of the filter to make it easy to look into a specific folder, prepend='/input/' looks into /input"""
-    if prepend:
-        filter = prepend+filter
-    return """split_fastqs() {
-  # do not assume arrays; keep it POSIX
-  for sep in _ . r R ""; do
-    r1=""; r2=""; extra=""
-    c1=0;  c2=0
-    for fq do
-      case "$fq" in
-        *${sep}1.f*q.gz) r1="${r1}${r1:+ }$fq"; c1=$((c1+1));;
-        *${sep}2.f*q.gz) r2="${r2}${r2:+ }$fq"; c2=$((c2+1));;
-        *)                extra="${extra}${extra:+ }$fq";;
-      esac
-    done
-    if [ "$c1" -gt 0 ] && [ "$c1" -eq "$c2" ]; then
-      READS1=$r1
-      READS2=$r2
-      EXTRA=$extra
-      return 0
-    fi
-    # else: try next separator
-  done
-  return 1
-}
-
-split_fastqs %s
-""" % filter
