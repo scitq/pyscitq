@@ -243,8 +243,8 @@ class Task:
                 raise ValueError(f"Invalid input type: {type(input_item)}. Expected str or Output.")
         
         resolved_output = Output(task=self, grouped=False).resolve_path()
-        if resolved_output is None:
-            raise ValueError(f"Task {self.full_name} output path could not be resolved (no publish and no workspace_root).")
+        #if resolved_output is None:
+        #    raise ValueError(f"Task {self.full_name} output path could not be resolved (no publish and no workspace_root).")
 
         # Resolve resources
         resolved_resources = list(map(str, self.resources))
