@@ -323,7 +323,7 @@ class Step:
         container: str,
         outputs: Optional[Outputs] = None,
         inputs: Optional[Union[str, OutputBase, List[str], List[OutputBase]]] = None,
-        resources: Optional[Union[Resource, List[Resource]]] = None,
+        resources: Optional[Union[Resource, str, List[Resource], List[str]]] = None,
         language: Optional[Language] = None,
         depends: Optional[Union["Step",List["Step"]]] = None,
         retry: Optional[int]=None
@@ -333,7 +333,7 @@ class Step:
                 raise ValueError(f"Inconsistent outputs declared in step '{self.name}'")
             self.outputs_globs = outputs.globs
 
-        if isinstance(resources, Resource):
+        if isinstance(resources, Resource) or isinstance(resources, str):
             resources_list = [resources]
         else:
             resources_list = resources or []
@@ -395,7 +395,7 @@ class Workflow:
     last_created = None
 
     def __init__(self, name: str, version:str, description: str = "", worker_pool: Optional[WorkerPool] = None, language: Optional[Language] = None, tag: Optional[str] = None,
-                 naming_strategy: callable = dot_join, task_naming_strategy: callable = dot_join, provider: Optional[str] = None, region: Optional[str] = None):
+                 naming_strategy: callable = dot_join, task_naming_strategy: callable = dot_join, provider: Optional[str] = None, region: Optional[str] = None, retry: Optional[int] = None):
         self.name = name
         self.tag = tag
         self.description = description
@@ -411,6 +411,7 @@ class Workflow:
         self.full_name: Optional[str] = None
         self.workspace_root: Optional[str] = None
         self.version = version
+        self.retry = retry
         if Workflow.last_created is not None:
             print(f"⚠️ Warning: it is highly recommended to avoid declaring several Workflow in a code, you have previously declared {Workflow.last_created.name} and you redeclare {self.name}", file=sys.stderr)
         Workflow.last_created = self
@@ -424,7 +425,7 @@ class Workflow:
         tag: Optional[str] = None,
         inputs: Optional[Union[str, OutputBase, List[str], List[OutputBase]]] = None,
         outputs: Optional[Outputs] = None,
-        resources: Optional[Union[Resource, List[Resource]]] = None,
+        resources: Optional[Union[Resource, str, List[Resource], List[str]]] = None,
         language: Optional[Language] = None,
         worker_pool: Optional[WorkerPool] = None,
         task_spec: Optional[TaskSpec] = None,
@@ -434,6 +435,8 @@ class Workflow:
     ) -> Step:
         if naming_strategy is None:
             naming_strategy = self.task_naming_strategy
+        if retry is None:
+            retry = self.retry
         new_step = Step(name=name, workflow=self, worker_pool=worker_pool, task_spec=task_spec, naming_strategy=naming_strategy)
         if name in self._steps:
             existing = self._steps[name]
