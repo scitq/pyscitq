@@ -1,6 +1,7 @@
+from scitq2.validate import validate_shell
 from typing import Dict, List, Optional, Union
 from scitq2.grpc_client import Scitq2Client
-from scitq2.language import Language, Raw
+from scitq2.language import Language, Raw, Shell
 from scitq2.recruit import WorkerPool
 from scitq2.uri import Resource
 from scitq2.constants import DEFAULT_TASK_STATUS, ACTIONS
@@ -192,6 +193,18 @@ class Task:
         # Resolve command using the language's compile_command method
         resolved_command = self.language.compile_command(self.command)
         resolved_shell = self.language.executable()
+
+        # Runtime shell validation (second line of defense) — only for Shell language
+        if isinstance(self.language, Shell):
+            issues = validate_shell(resolved_command, shell=resolved_shell, allow_source_kw=True)
+            errors = [i for i in issues if i.level == "error"]
+            for i in issues:
+                # Attach task context to messages
+                prefix = "❌" if i.level == "error" else "⚠️"
+                where = f"{self.step.workflow.full_name or self.step.workflow.name}:{self.full_name}"
+                print(f"{prefix} {where}: {i.msg}{(' — ' + i.suggestion) if i.suggestion else ''}", file=sys.stderr)
+            if errors:
+                raise ValueError(f"Shell validation failed for task {self.full_name}; fix errors above.")
 
         # Normalize inputs so we can accept a single OutputBase/str or an iterable of them
         if isinstance(self.inputs, (OutputBase, str)) or isinstance(self.inputs, (bytes, bytearray)):
