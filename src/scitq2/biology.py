@@ -6,8 +6,6 @@ from typing import Any, Dict, Iterator, List, Optional, Iterable, Literal
 import re
 from .uri import URI, URIObject
 import sys
-import fnmatch
-
 
 
 # Only fields that exist in ENA (and possibly SRA after remapping)
@@ -261,9 +259,8 @@ def ENA(identifier: str, group_by: str, filter: Optional[SampleFilter] = None, u
 
 def SRA(identifier: str, group_by: str, filter: Optional[SampleFilter] = None, layout: str=AUTO) -> List[Sample]:
     cmd = [
-        "docker", "run", "--rm", "ncbi/edirect",
-        "esearch", "-db", "sra", "-query", identifier,
-        "|", "efetch", "-format", "runinfo"
+        "docker", "run", "--rm", "ncbi/edirect", "sh", "-c",
+        f'"esearch -db sra -query {identifier} | efetch -format runinfo"'
     ]
     joined = " ".join(cmd)
     process = subprocess.run(joined, shell=True, stdout=subprocess.PIPE, check=True)
