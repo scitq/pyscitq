@@ -140,6 +140,11 @@ class TaskQueueStub(object):
                 request_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
                 response_deserializer=taskqueue__pb2.RcloneConfig.FromString,
                 _registered_method=True)
+        self.GetDockerCredentials = channel.unary_unary(
+                '/taskqueue.TaskQueue/GetDockerCredentials',
+                request_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
+                response_deserializer=taskqueue__pb2.DockerCredentials.FromString,
+                _registered_method=True)
         self.Login = channel.unary_unary(
                 '/taskqueue.TaskQueue/Login',
                 request_serializer=taskqueue__pb2.LoginRequest.SerializeToString,
@@ -224,6 +229,11 @@ class TaskQueueStub(object):
                 '/taskqueue.TaskQueue/DeleteStep',
                 request_serializer=taskqueue__pb2.StepId.SerializeToString,
                 response_deserializer=taskqueue__pb2.Ack.FromString,
+                _registered_method=True)
+        self.GetStepStats = channel.unary_unary(
+                '/taskqueue.TaskQueue/GetStepStats',
+                request_serializer=taskqueue__pb2.StepStatsRequest.SerializeToString,
+                response_deserializer=taskqueue__pb2.StepStatsResponse.FromString,
                 _registered_method=True)
         self.GetWorkerStats = channel.unary_unary(
                 '/taskqueue.TaskQueue/GetWorkerStats',
@@ -431,6 +441,12 @@ class TaskQueueServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetDockerCredentials(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def Login(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -528,6 +544,12 @@ class TaskQueueServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def DeleteStep(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetStepStats(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -733,6 +755,11 @@ def add_TaskQueueServicer_to_server(servicer, server):
                     request_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
                     response_serializer=taskqueue__pb2.RcloneConfig.SerializeToString,
             ),
+            'GetDockerCredentials': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetDockerCredentials,
+                    request_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
+                    response_serializer=taskqueue__pb2.DockerCredentials.SerializeToString,
+            ),
             'Login': grpc.unary_unary_rpc_method_handler(
                     servicer.Login,
                     request_deserializer=taskqueue__pb2.LoginRequest.FromString,
@@ -817,6 +844,11 @@ def add_TaskQueueServicer_to_server(servicer, server):
                     servicer.DeleteStep,
                     request_deserializer=taskqueue__pb2.StepId.FromString,
                     response_serializer=taskqueue__pb2.Ack.SerializeToString,
+            ),
+            'GetStepStats': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetStepStats,
+                    request_deserializer=taskqueue__pb2.StepStatsRequest.FromString,
+                    response_serializer=taskqueue__pb2.StepStatsResponse.SerializeToString,
             ),
             'GetWorkerStats': grpc.unary_unary_rpc_method_handler(
                     servicer.GetWorkerStats,
@@ -1472,6 +1504,33 @@ class TaskQueue(object):
             _registered_method=True)
 
     @staticmethod
+    def GetDockerCredentials(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/taskqueue.TaskQueue/GetDockerCredentials',
+            google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
+            taskqueue__pb2.DockerCredentials.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
     def Login(request,
             target,
             options=(),
@@ -1920,6 +1979,33 @@ class TaskQueue(object):
             '/taskqueue.TaskQueue/DeleteStep',
             taskqueue__pb2.StepId.SerializeToString,
             taskqueue__pb2.Ack.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetStepStats(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/taskqueue.TaskQueue/GetStepStats',
+            taskqueue__pb2.StepStatsRequest.SerializeToString,
+            taskqueue__pb2.StepStatsResponse.FromString,
             options,
             channel_credentials,
             insecure,
