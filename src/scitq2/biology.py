@@ -271,7 +271,7 @@ def SRA(identifier: str, group_by: str, filter: Optional[SampleFilter] = None, l
         return {
             "run_accession": r["Run"],
             "experiment_accession": r["Experiment"],
-            "sample_accession": r["Sample"],
+            "sample_accession": r["BioSample"],
             "study_accession": r["SRAStudy"],
             "library_name": r["LibraryName"],
             "library_strategy": r["LibraryStrategy"],
