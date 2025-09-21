@@ -7,6 +7,12 @@ from .util import cond
 from .language import Shell, Raw
 from .uri import Resource, URI, check_if_file
 from .runner import run
+from .grpc_client import Scitq2Client
+
+@property
+def client():
+    return Scitq2Client()
+
 
 __all__ = [
     "Workflow",
@@ -21,4 +27,5 @@ __all__ = [
     "URI",
     "check_if_file",
     "run",
+    "client",
 ]
