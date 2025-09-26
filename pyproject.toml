@@ -1,6 +1,6 @@
 [project]
 name = "pyscitq2"
-version = "0.2.9"
+version = "0.3"
 description = "Python DSL for defining scitq2 workflows"
 authors = [{ name="Raynald de Lahondès" }]
 readme = "README.md"
