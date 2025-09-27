@@ -8,6 +8,7 @@ from .language import Shell, Raw
 from .uri import Resource, URI, check_if_file
 from .runner import run
 from .grpc_client import Scitq2Client as Client
+from .__version__ import __version__
 
 __all__ = [
     "Workflow",
@@ -23,4 +24,6 @@ __all__ = [
     "check_if_file",
     "run",
     "client",
+    "__version__",
 ]
+
