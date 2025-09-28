@@ -23,7 +23,7 @@ __all__ = [
     "URI",
     "check_if_file",
     "run",
-    "client",
+    "Client",
     "__version__",
 ]
 
