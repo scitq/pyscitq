@@ -225,12 +225,22 @@ class Task:
                         resolved_depends.add(task_id)
         elif self.depends is not None:
             # Step 2: if explicit dependencies are given, resolve them
-            if isinstance(self.depends, Iterable) and all(isinstance(dep, Task) for dep in self.depends):
+            if isinstance(self.depends, Iterable):
                 for dep in self.depends:
-                    if dep.task_id is None:
-                        raise ValueError(f'Task {dep.full_name} is not compiled yet cannot build depends.')
+                    if isinstance(dep, Step):
+                        if dep.task_id is None:
+                            raise ValueError(f'Task {dep.full_name} is not compiled yet cannot build depends.')
+                        else:
+                            resolved_depends.add(dep.task_id)
+                    elif isinstance(dep, GroupedStep):
+                        resolved_depends.update(dep.task_ids())
+                    elif isinstance(dep, Task):
+                        if dep.task_id is None:
+                            raise ValueError(f'Task {dep.full_name} is not compiled yet cannot build depends.')
+                        else:
+                            resolved_depends.add(dep.task_id)
                     else:
-                        resolved_depends.add(dep.task_id)
+                        raise ValueError(f"Depends for task {self.full_name} contains an invalid item of type {type(dep)}; expected Task, Step or GroupedStep.")  
             elif isinstance(self.depends, GroupedStep):
                 resolved_depends.update(self.depends.task_ids())
             else:
@@ -355,7 +365,17 @@ class Step:
             resolved_depends = None
         elif isinstance(depends, Step):
             resolved_depends = [depends.task]
-        elif isinstance(depends, Iterable) and all(isinstance(dep, Step) for dep in depends):
+        elif isinstance(depends, GroupedStep):
+            resolved_depends = [depends.step.task for depends in depends.step.tasks]
+        elif isinstance(depends, Iterable):
+            resolved_depends = []
+            for dep in depends:
+                if isinstance(dep, Step):
+                    resolved_depends.append(dep.task)
+                elif isinstance(dep, GroupedStep):
+                    resolved_depends.extend(dep.task_ids())
+                else:   
+                    raise ValueError(f"""Depends not of the right kind, when a list it should be a list of Step or GroupedStep""")
             resolved_depends = [dep.task for dep in depends]
         else:
             raise ValueError(f"""Depends not of the right kind, should be a Step or list of Step""")
