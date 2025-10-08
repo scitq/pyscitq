@@ -97,7 +97,7 @@ class TaskQueueStub(object):
                 _registered_method=True)
         self.DeleteWorker = channel.unary_unary(
                 '/taskqueue.TaskQueue/DeleteWorker',
-                request_serializer=taskqueue__pb2.WorkerId.SerializeToString,
+                request_serializer=taskqueue__pb2.WorkerDeletion.SerializeToString,
                 response_deserializer=taskqueue__pb2.JobId.FromString,
                 _registered_method=True)
         self.UpdateWorker = channel.unary_unary(
@@ -712,7 +712,7 @@ def add_TaskQueueServicer_to_server(servicer, server):
             ),
             'DeleteWorker': grpc.unary_unary_rpc_method_handler(
                     servicer.DeleteWorker,
-                    request_deserializer=taskqueue__pb2.WorkerId.FromString,
+                    request_deserializer=taskqueue__pb2.WorkerDeletion.FromString,
                     response_serializer=taskqueue__pb2.JobId.SerializeToString,
             ),
             'UpdateWorker': grpc.unary_unary_rpc_method_handler(
@@ -1275,7 +1275,7 @@ class TaskQueue(object):
             request,
             target,
             '/taskqueue.TaskQueue/DeleteWorker',
-            taskqueue__pb2.WorkerId.SerializeToString,
+            taskqueue__pb2.WorkerDeletion.SerializeToString,
             taskqueue__pb2.JobId.FromString,
             options,
             channel_credentials,

@@ -159,24 +159,17 @@ class WorkerPool:
             options["prefetch"] = 0
         else:
             if task_spec.concurrency is None:
-                if not any(e.field == "cpu" for e in self.match) and not any(e.field == "mem" for e in self.match):
-                    raise ValueError("To use a TaskSpec, WorkerPool must include a cpu and/or mem requirement")
-
-                candidates = []
-                for e in self.match:
-                    if e.field == "cpu" and task_spec.cpu is not None:
-                        candidates.append(float(e.value) / task_spec.cpu)
-                    if e.field == "mem" and task_spec.mem is not None:
-                        candidates.append(float(e.value) / task_spec.mem)
-
-                concurrency = int(max(1, min(candidates)))
+                options["cpu_per_task"]=task_spec.cpu
+                options["memory_per_task"]=task_spec.mem
+                options["prefetch_percent"]=int(task_spec.prefetch*100)
             else:
                 concurrency = task_spec.concurrency
+                prefetch = round(concurrency * task_spec.prefetch)
+                options["concurrency"] = concurrency
+                if prefetch > 0:
+                    options["prefetch"] = prefetch
 
-            prefetch = round(concurrency * task_spec.prefetch)
-            options["concurrency"] = concurrency
-            if prefetch > 0:
-                options["prefetch"] = prefetch
+            
 
         return options
     

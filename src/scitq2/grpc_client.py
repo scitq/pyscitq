@@ -177,17 +177,32 @@ class Scitq2Client:
         response = self.stub.SubmitTask(request)
         return response.task_id
 
-    def create_recruiter(self, *, step_id: int, protofilter: str, concurrency: int, rank: int=1, 
-                         prefetch: int=0, max_recruited: Optional[int]=None, rounds: int=1, timeout: int=DEFAULT_RECRUITER_TIMEOUT) -> int:
+    def create_recruiter(self, *, step_id: int, protofilter: str, rank: int=1, 
+                         concurrency: Optional[int]=None, prefetch: Optional[int]=None, 
+                         cpu_per_task: Optional[int]=None, memory_per_task: Optional[float]=None, disk_per_task: Optional[float]=None, 
+                         concurrency_max: Optional[int]=None, concurrency_min: Optional[int]=None,
+                         prefetch_percent: Optional[int]=None,
+                         max_recruited: Optional[int]=None, rounds: int=1, timeout: int=DEFAULT_RECRUITER_TIMEOUT) -> int:
         """
         Creates a recruiter for a given step.
 
         Parameters:
         - step_id (int): ID of the step the recruiter belongs to
         - protofilter (str): Recruitment rule
-        - concurrency (int): Concurrency settings for workers recruited here
-        - prefetch (int): (optional) Prefetch settings for workers recruited here
         - rank (int): (optional) Enable concurrent recruiters (adjust timeout)
+
+        either static concurrency:
+        - concurrency (int): (optional) Concurrency settings for workers recruited here
+        - prefetch (int): (optional) Prefetch settings for workers recruited here
+
+        or dynamic concurrency (if concurrency is omitted, one of cpu_per_task, memory_per_task or disk_per_task must be specified):
+        - cpu_per_task (int): (optional) Number of CPU required for 1 task,
+        - memory_per_task (float): (optional) Memory (Gb) required for 1 task, 
+        - disk_per_task (float): (optional) Disk space (Gb) required for 1 task,
+        - prefetch_percent (int): (optional) prefetch expressed as a % of concurrency, 100 => prefetch = concurrency
+        - concurrency_min (int): (optional) Minimal concurrency (only used with dynamic concurrency)
+        - concurrency_max (int): (optional) Maximal concurrency (only used with dynamic concurrency)
+
         - max_recruited (int): (optional) Set an upper limit for this recruiter
         - rounds (int): (optional) Adjust level of recruitment based on the number of iteration expected for each worker
         - timeout (int): (optional) Adjust recycling/newly created worker strategy
@@ -201,6 +216,12 @@ class Scitq2Client:
             rank=rank,
             concurrency=concurrency,
             prefetch=prefetch,
+            cpu_per_task=cpu_per_task,
+            memory_per_task=memory_per_task,
+            disk_per_task=disk_per_task,
+            prefetch_percent=prefetch_percent,
+            concurrency_min=concurrency_min,
+            concurrency_max=concurrency_max,
             rounds=rounds,
             timeout=timeout,
         )

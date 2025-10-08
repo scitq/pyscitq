@@ -19,7 +19,7 @@ service TaskQueue {
     rpc ListWorkers (ListWorkersRequest) returns (WorkersList);
     rpc CreateWorker(WorkerRequest) returns (WorkerIds);
     rpc UpdateWorkerStatus(WorkerStatus) returns (Ack);
-    rpc DeleteWorker(WorkerId) returns (JobId);
+    rpc DeleteWorker(WorkerDeletion) returns (JobId);
     rpc UpdateWorker(WorkerUpdateRequest) returns (Ack);
     rpc GetWorkerStatuses (WorkerStatusRequest) returns (WorkerStatusResponse);
     rpc ListJobs (ListJobsRequest) returns (JobsList);
@@ -136,6 +136,7 @@ message Worker {
     string provider = 9;
     string region = 10;
     optional int32 step_id = 11;
+    optional string step_name = 12;
 }
 
 
@@ -144,6 +145,7 @@ message WorkersList {
 }
 
 message ListWorkersRequest {
+  optional int32 workflow_id = 1;
 }
 
 message TaskUpdate {
@@ -165,6 +167,7 @@ message TaskStatusUpdate {
     int32 task_id = 1;
     string new_status = 2;
     optional int32 duration = 3; // in seconds
+    optional bool free_retry = 4; // if new_status is F and this is true, then retry is increased by 1 before setting status to F
 }
 
 message TaskLog {
@@ -200,6 +203,11 @@ message TaskId {
 
 message WorkerId {
     int32 worker_id = 1;
+}
+
+message WorkerDeletion {
+    int32 worker_id = 1;
+    optional bool undeployed = 2; // if true, the worker is already undeployed so deletion can proceed
 }
 
 message WorkerStatusRequest {
@@ -411,11 +419,17 @@ message Recruiter {
     int32 step_id = 1;
     int32 rank = 2;
     string protofilter = 3;
-    int32 concurrency = 4;
-    int32 prefetch = 5;
+    optional int32 concurrency = 4;
+    optional int32 prefetch = 5;
     optional int32 max_workers = 6;
     int32 rounds = 7;
     int32 timeout = 8;
+    optional int32 cpu_per_task = 9;
+    optional float memory_per_task = 10;
+    optional float disk_per_task = 11;
+    optional int32 prefetch_percent = 12;
+    optional int32 concurrency_min = 13;
+    optional int32 concurrency_max = 14;
 }
 
 message RecruiterUpdate {
@@ -427,6 +441,12 @@ message RecruiterUpdate {
   optional int32 max_workers = 6;
   optional int32 rounds = 7;
   optional int32 timeout = 8;
+  optional int32 cpu_per_task = 9;
+  optional float memory_per_task = 10;
+  optional float disk_per_task = 11;
+  optional int32 prefetch_percent = 12;
+  optional int32 concurrency_min = 13;
+  optional int32 concurrency_max = 14;
 }
 
 message RecruiterList {
@@ -503,18 +523,19 @@ message StepStats {
     int32 waiting_tasks = 4;
     int32 pending_tasks = 5;
     int32 accepted_tasks = 6;
-    int32 onhold_tasks = 7;
-    int32 running_tasks = 8;
+    int32 running_tasks = 7;
+    int32 uploading_tasks = 8;
     int32 successful_tasks = 9;
     int32 failed_tasks = 10;
-    Accum success_run = 11;     // succeeded tasks' run durations
-    Accum failed_run = 12;      // failed tasks' run durations
-    Accum running_run = 13;  // running tasks' elapsed durations (at eval time)
-    Accum download = 14;        // download durations
-    Accum upload = 15;          // upload durations
-    optional int32 start_time = 16; // epoch timestamp of the first task start time
-    optional int32 end_time = 17;   // epoch timestamp of the last task end time
-    int32 stats_eval_time = 18; // epoch seconds when these stats were computed
+    int32 really_failed_tasks = 11; // tasks that have exhausted all retries and are failed
+    Accum success_run = 12;     // succeeded tasks' run durations
+    Accum failed_run = 13;      // failed tasks' run durations
+    Accum running_run = 14;  // running tasks' elapsed durations (at eval time)
+    Accum download = 15;        // download durations
+    Accum upload = 16;          // upload durations
+    optional int32 start_time = 17; // epoch timestamp of the first task start time
+    optional int32 end_time = 18;   // epoch timestamp of the last task end time
+    int32 stats_eval_time = 19; // epoch seconds when these stats were computed
 }
 
 message StepStatsResponse {
